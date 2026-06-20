@@ -31,8 +31,8 @@ function HomePage() {
   }, [inputText, currency]);
 
   const handleAddExpense = async () => {
-    if (!parsedPreview || !parsedPreview.amount) return;
-    
+    if (!parsedPreview || !parsedPreview.amount.value) return;
+
     setIsAdding(true);
     try {
       await addNewExpense(parsedPreview);
@@ -72,7 +72,7 @@ function HomePage() {
             <button
               className="btn-submit-icon"
               onClick={handleAddExpense}
-              disabled={!parsedPreview || !parsedPreview.amount || isAdding}
+              disabled={!parsedPreview || !parsedPreview.amount.value || isAdding}
               aria-label="Add Expense"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -85,31 +85,39 @@ function HomePage() {
           {/* Minimalist Preview Pill */}
           <div className={`preview-pill-container ${parsedPreview ? 'visible' : ''}`}>
             {parsedPreview && (
-              <div className={`preview-pill ${!parsedPreview.amount ? 'muted' : ''}`}>
-                <div className="preview-pill-amount">
-                  {parsedPreview.amount ? formatAmount(parsedPreview.amount, parsedPreview.currency) : formatAmount(0, currency)}
+              <div className={`preview-pill ${!parsedPreview.amount.value ? 'muted' : ''}`}>
+                <div className={`preview-pill-amount ${parsedPreview.amount.confidence < 0.7 ? 'low-confidence' : ''}`}>
+                  {parsedPreview.amount.value
+                    ? formatAmount(parsedPreview.amount.value, parsedPreview.currency.value)
+                    : formatAmount(0, currency)}
                 </div>
                 <div className="preview-pill-divider"></div>
                 <div className="preview-pill-details">
-                  <span className="preview-pill-cat">
-                    {getCategoryEmoji(parsedPreview.category)} {getCategoryLabel(parsedPreview.category)}
+                  <span className={`preview-pill-cat ${parsedPreview.category.confidence < 0.7 ? 'low-confidence' : ''}`}>
+                    {getCategoryEmoji(parsedPreview.category.value)} {getCategoryLabel(parsedPreview.category.value)}
                   </span>
-                  {parsedPreview.item && (
+                  {parsedPreview.item.value && (
                     <>
                       <span className="preview-pill-dot">•</span>
-                      <span className="preview-pill-item">{parsedPreview.item}</span>
+                      <span className={`preview-pill-item ${parsedPreview.item.confidence < 0.7 ? 'low-confidence' : ''}`}>
+                        {parsedPreview.item.value}
+                      </span>
                     </>
                   )}
-                  {parsedPreview.people && parsedPreview.people.length > 0 && (
+                  {parsedPreview.people.value && parsedPreview.people.value.length > 0 && (
                     <>
                       <span className="preview-pill-dot">•</span>
-                      <span className="preview-pill-item">with {parsedPreview.people.join(', ')}</span>
+                      <span className={`preview-pill-item ${parsedPreview.people.confidence < 0.7 ? 'low-confidence' : ''}`}>
+                        with {parsedPreview.people.value.join(', ')}
+                      </span>
                     </>
                   )}
-                  {parsedPreview.date && (
+                  {parsedPreview.date.value && (
                     <>
                       <span className="preview-pill-dot">•</span>
-                      <span className="preview-pill-item">{parsedPreview.date}</span>
+                      <span className={`preview-pill-item ${parsedPreview.date.confidence < 0.7 ? 'low-confidence' : ''}`}>
+                        {parsedPreview.date.value}
+                      </span>
                     </>
                   )}
                 </div>

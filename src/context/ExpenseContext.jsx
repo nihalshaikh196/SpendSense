@@ -52,9 +52,23 @@ export function ExpenseProvider({ children }) {
 
   const addNewExpense = useCallback(async (parsedData) => {
     try {
-      const saved = await addExpense(parsedData);
+      // Flatten confidence-wrapped parser output into the flat DB schema.
+      // Pre-flattened input (e.g. from edits or imports) passes through unchanged.
+      const flat = parsedData.amount && typeof parsedData.amount === 'object' && 'value' in parsedData.amount
+        ? {
+            amount:   parsedData.amount.value,
+            currency: parsedData.currency.value,
+            date:     parsedData.date.value,
+            item:     parsedData.item.value,
+            people:   parsedData.people.value,
+            category: parsedData.category.value,
+            raw:      parsedData.raw,
+          }
+        : parsedData;
+
+      const saved = await addExpense(flat);
       setExpenses((prev) => [saved, ...prev]);
-      
+
       if (user) {
         setIsSyncing(true);
         syncSingleExpense(user, saved)

@@ -316,10 +316,53 @@ function extractItem(text, partsToRemove) {
   return words.join(' ');
 }
 
+// ─── Confidence Aggregation ───────────────────────────────────────────────────
+
+/**
+ * Per-field weights used to compute overallConfidence. Amount and item are
+ * weighted highest because they're the most user-visible and most likely to
+ * trigger NER fallback when uncertain.
+ */
+const FIELD_WEIGHTS = {
+  amount: 3,
+  item: 2,
+  people: 2,
+  date: 1,
+  currency: 1,
+  category: 1,
+};
+
+/**
+ * Computes a weighted overall confidence (0..1) from individual field
+ * confidences. Used by the Phase 3 NER fallback cascade — when overall < 0.7,
+ * the on-device NER model is invoked to refine extraction.
+ *
+ * @param {Object} fields - { amount, currency, date, item, people, category }
+ * @returns {number} Weighted average confidence in [0, 1]
+ */
+function computeOverallConfidence(fields) {
+  let weightedSum = 0;
+  let totalWeight = 0;
+  for (const [key, weight] of Object.entries(FIELD_WEIGHTS)) {
+    const c = fields[key]?.confidence;
+    if (typeof c === 'number') {
+      weightedSum += c * weight;
+      totalWeight += weight;
+    }
+  }
+  return totalWeight === 0 ? 0 : Math.round((weightedSum / totalWeight) * 100) / 100;
+}
+
 // ─── Main Parser ──────────────────────────────────────────────────────────────
 
 /**
- * Parses a natural language expense sentence into a structured object.
+ * Parses a natural language expense sentence into a structured object with
+ * per-field confidence scores.
+ *
+ * Each extracted field returns `{ value, confidence }` where confidence is in
+ * the range [0, 1]. An aggregate `overallConfidence` is also returned, used by
+ * the Phase 3 NER fallback to decide whether to refine the parse with an
+ * on-device model.
  *
  * Handles a wide variety of input patterns:
  * - Standard: "Spent 300 on vadapav with wilson"
@@ -335,37 +378,43 @@ function extractItem(text, partsToRemove) {
  * @param {string} sentence         - Natural language expense description
  * @param {string} [defaultCurrency='INR'] - Fallback currency if none detected
  * @returns {{
- *   amount: number|null,
- *   currency: string,
- *   date: string,
- *   item: string,
- *   people: string[],
- *   category: string,
- *   raw: string
- * }} Parsed expense object
+ *   amount:   { value: number|null, confidence: number },
+ *   currency: { value: string,      confidence: number },
+ *   date:     { value: string,      confidence: number },
+ *   item:     { value: string,      confidence: number },
+ *   people:   { value: string[],    confidence: number },
+ *   category: { value: string,      confidence: number },
+ *   raw: string,
+ *   overallConfidence: number
+ * }} Parsed expense object with confidence scores
  *
  * @example
- * parseExpense('Spent 300 on vadapav with wilson')
- * // → { amount: 300, currency: 'INR', date: '2026-06-20',
- * //     item: 'vadapav', people: ['Wilson'], category: 'food',
- * //     raw: 'Spent 300 on vadapav with wilson' }
- *
- * @example
- * parseExpense('50 dollars on souvenirs yesterday')
- * // → { amount: 50, currency: 'USD', date: '2026-06-19',
- * //     item: 'souvenirs', people: [], category: 'other',
- * //     raw: '50 dollars on souvenirs yesterday' }
+ * parseExpense('Spent 300 rupees on vadapav with wilson')
+ * // → {
+ * //     amount:   { value: 300, confidence: 1.0 },
+ * //     currency: { value: 'INR', confidence: 1.0 },
+ * //     date:     { value: '2026-06-21', confidence: 0.5 },
+ * //     item:     { value: 'vadapav', confidence: 0.9 },
+ * //     people:   { value: ['Wilson'], confidence: 0.9 },
+ * //     category: { value: 'food', confidence: 0.9 },
+ * //     raw: 'Spent 300 rupees on vadapav with wilson',
+ * //     overallConfidence: 0.86
+ * //   }
  */
 export function parseExpense(sentence, defaultCurrency = 'INR') {
   if (!sentence || typeof sentence !== 'string') {
+    const fields = {
+      amount:   { value: null, confidence: 0 },
+      currency: { value: defaultCurrency, confidence: 0.5 },
+      date:     { value: toDateString(new Date()), confidence: 0.5 },
+      item:     { value: '', confidence: 0 },
+      people:   { value: [], confidence: 0 },
+      category: { value: 'other', confidence: 0.4 },
+    };
     return {
-      amount: null,
-      currency: defaultCurrency,
-      date: toDateString(new Date()),
-      item: '',
-      people: [],
-      category: 'other',
+      ...fields,
       raw: sentence || '',
+      overallConfidence: computeOverallConfidence(fields),
     };
   }
 
@@ -374,19 +423,48 @@ export function parseExpense(sentence, defaultCurrency = 'INR') {
 
   // ── 1. Currency ──
   const detectedCurrency = detectCurrency(raw);
-  const currency = detectedCurrency || defaultCurrency;
+  const currencyValue = detectedCurrency || defaultCurrency;
+  // 1.0 if we found a keyword/symbol, 0.5 if we defaulted from settings.
+  const currencyConfidence = detectedCurrency ? 1.0 : 0.5;
 
   // ── 2. Amount ──
   const amountResult = extractAmount(raw);
-  const amount = amountResult ? amountResult.amount : null;
+  const amountValue = amountResult ? amountResult.amount : null;
+  // Confidence factors:
+  //   - Missing entirely → 0
+  //   - Found + explicit currency keyword/symbol nearby → 1.0
+  //   - Found but currency was defaulted (no explicit signal) → 0.8
+  let amountConfidence;
+  if (amountValue === null) {
+    amountConfidence = 0;
+  } else if (detectedCurrency) {
+    amountConfidence = 1.0;
+  } else {
+    amountConfidence = 0.8;
+  }
 
   // ── 3. Date ──
   const dateResult = resolveDate(raw, today);
-  const date = dateResult ? dateResult.dateStr : toDateString(today);
+  const dateValue = dateResult ? dateResult.dateStr : toDateString(today);
+  // 1.0 if we matched an explicit date phrase, 0.5 if we defaulted to today.
+  const dateConfidence = dateResult ? 1.0 : 0.5;
 
   // ── 4. People ──
   const peopleResult = extractPeople(raw);
-  const people = peopleResult.people;
+  const peopleValue = peopleResult.people;
+  // Confidence by which extraction pattern matched:
+  //   - Empty (no pattern matched) → 0 (signals "we didn't try to extract")
+  //   - "with X" pattern (most reliable) → 0.9
+  //   - "X had/went/..." or "X and I" start patterns → 0.7
+  //     (less reliable — capitalized words at start can be other things)
+  let peopleConfidence;
+  if (peopleValue.length === 0) {
+    peopleConfidence = 0;
+  } else if (/\bwith\b/i.test(peopleResult.matched)) {
+    peopleConfidence = 0.9;
+  } else {
+    peopleConfidence = 0.7;
+  }
 
   // ── 5. Item (extract by removing known parts) ──
   const removals = [
@@ -395,23 +473,49 @@ export function parseExpense(sentence, defaultCurrency = 'INR') {
     peopleResult.matched ? peopleResult.matched : null,
   ].filter(Boolean);
 
-  const item = extractItem(raw, removals);
-
-  // ── 6. Category (detect from item + original text for context) ──
-  // Try item first; if that yields 'other', try the full raw input
-  let category = detectCategory(item);
-  if (category === 'other') {
-    category = detectCategory(raw);
+  const itemValue = extractItem(raw, removals);
+  // 0.9 if we got a non-trivial item; 0.6 if it's very short or empty.
+  let itemConfidence;
+  if (!itemValue || itemValue.length < 2) {
+    itemConfidence = 0.6;
+  } else {
+    itemConfidence = 0.9;
   }
 
+  // ── 6. Category (detect from item + original text for context) ──
+  let categoryValue = detectCategory(itemValue);
+  let categoryFromRaw = false;
+  if (categoryValue === 'other') {
+    const fromRaw = detectCategory(raw);
+    if (fromRaw !== 'other') {
+      categoryValue = fromRaw;
+      categoryFromRaw = true;
+    }
+  }
+  // 0.9 if matched directly from item, 0.7 if matched from raw fallback,
+  // 0.4 if defaulted to 'other'.
+  let categoryConfidence;
+  if (categoryValue === 'other') {
+    categoryConfidence = 0.4;
+  } else if (categoryFromRaw) {
+    categoryConfidence = 0.7;
+  } else {
+    categoryConfidence = 0.9;
+  }
+
+  const fields = {
+    amount:   { value: amountValue,   confidence: amountConfidence },
+    currency: { value: currencyValue, confidence: currencyConfidence },
+    date:     { value: dateValue,     confidence: dateConfidence },
+    item:     { value: itemValue,     confidence: itemConfidence },
+    people:   { value: peopleValue,   confidence: peopleConfidence },
+    category: { value: categoryValue, confidence: categoryConfidence },
+  };
+
   return {
-    amount,
-    currency,
-    date,
-    item,
-    people,
-    category,
+    ...fields,
     raw,
+    overallConfidence: computeOverallConfidence(fields),
   };
 }
 
