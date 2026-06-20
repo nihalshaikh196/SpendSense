@@ -1,0 +1,146 @@
+.dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  max-width: var(--max-width);
+  margin: 0 auto;
+}
+
+/* ─── Summary Stats ───────────────────────────────────────────────────────── */
+
+.summary-cards {
+  display: flex;
+  gap: var(--space-md);
+  overflow-x: auto;
+  padding-bottom: var(--space-xs);
+  margin: 0 calc(var(--space-md) * -1);
+  padding: 0 var(--space-md) var(--space-xs);
+}
+
+.summary-card {
+  flex: 1;
+  min-width: 140px;
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  animation: scaleIn 400ms ease backwards;
+}
+
+.summary-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.summary-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.summary-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ─── Charts ──────────────────────────────────────────────────────────────── */
+
+.chart-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  animation: fadeInUp 500ms ease backwards;
+}
+
+.chart-card {
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 250px;
+  position: relative;
+}
+
+.chart-container {
+  width: 100%;
+  position: relative;
+  height: 250px;
+}
+
+.donut-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+  width: 100%;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+}
+
+.legend-value {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-left: 4px;
+}
+
+/* ─── People Spending ─────────────────────────────────────────────────────── */
+
+.people-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  animation: fadeInUp 600ms ease backwards;
+}
+
+.person-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md) var(--space-lg);
+}
+
+.person-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.person-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background: var(--accent-gradient);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.person-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.person-amount {
+  font-weight: 600;
+  color: var(--text-primary);
+}

@@ -1,0 +1,90 @@
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  max-width: var(--max-width);
+  margin: 0 auto;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  animation: fadeInDown 300ms ease backwards;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  animation: fadeInUp 400ms ease backwards;
+}
+
+.settings-section-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding-left: var(--space-sm);
+}
+
+.settings-card {
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.settings-helper {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.settings-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.about-card {
+  align-items: center;
+  text-align: center;
+  gap: var(--space-sm);
+}
+
+.about-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.about-version {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--accent-secondary);
+  background: var(--accent-bg);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.about-tagline {
+  color: var(--text-secondary);
+  margin-top: var(--space-xs);
+}
+
+.about-credits {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: var(--space-lg);
+}
