@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useExpenses } from '../context/ExpenseContext.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import { parseExpense } from '../lib/parser.js';
 import { formatAmount } from '../lib/currency.js';
 import { getCategoryEmoji, getCategoryLabel, CATEGORIES } from '../lib/categories.js';
@@ -9,6 +10,7 @@ import './HomePage.css';
 function HomePage() {
   const { addNewExpense } = useExpenses();
   const { currency } = useSettings();
+  const { user } = useAuth();
   const [inputText, setInputText] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const textareaRef = useRef(null);
@@ -55,7 +57,10 @@ function HomePage() {
     <div className="home-page page-container">
       {/* ─── Hero Input Area ─── */}
       <section className="hero-section">
-        <h1 className="app-logo-text">SpendSense</h1>
+        <div className="hero-header">
+          <h1 className="app-logo-text">SpendSense</h1>
+          {!user && <span className="local-mode-badge" title="Expenses are saved on this device. Login in Settings to sync.">☁️ Local Mode</span>}
+        </div>
         
         <div className="expense-input-wrapper">
           <div className={`expense-input-container ${inputText.trim() ? 'has-input' : ''}`}>
@@ -122,6 +127,9 @@ function HomePage() {
                   )}
                 </div>
               </div>
+            )}
+            {inputText.trim() && parsedPreview && !parsedPreview.amount && (
+              <div className="helper-text-amount">Please include an amount (e.g. "50") to add this expense.</div>
             )}
           </div>
         </div>
