@@ -94,8 +94,9 @@ function SettingsPage() {
         <div className="glass-card settings-card">
           {!user ? (
             <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '12px' }}>
-              <p style={{ fontSize: '0.9rem', margin: 0, color: 'var(--text-secondary)' }}>
-                Login with Google to automatically backup and sync your expenses across devices.
+              <p style={{ fontSize: '0.9rem', margin: 0, color: 'var(--text-secondary)', lineHeight: '1.4' }}>
+                <strong>You can use SpendSense completely offline.</strong><br/>
+                Login with Google only if you want to backup and sync your expenses across devices.
               </p>
               <button className="btn-google" onClick={loginWithGoogle}>
                 <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
