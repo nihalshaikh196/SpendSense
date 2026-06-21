@@ -53,6 +53,26 @@ function HomePage() {
     }
   };
 
+  // Maps the parser's amount.confidence into a user-facing warning when the
+  // value is unclear or possibly wrong. Returning null hides the yellow box.
+  const getAmountWarning = () => {
+    if (!parsedPreview) return null;
+    const c = parsedPreview.amount.confidence;
+    if (c === 0) {
+      return 'Please include an amount (e.g. "50") to add this expense.';
+    }
+    if (c === 0.5) {
+      const used = formatAmount(parsedPreview.amount.value, parsedPreview.currency.value);
+      return `Multiple amounts detected. Only ${used} was used — edit after saving if needed.`;
+    }
+    if (c === 0.7) {
+      return 'Treated as an approximate value. Edit if you have an exact figure.';
+    }
+    return null;
+  };
+
+  const amountWarning = inputText.trim() ? getAmountWarning() : null;
+
   return (
     <div className="home-page page-container">
       {/* ─── Hero Input Area ─── */}
@@ -128,8 +148,8 @@ function HomePage() {
                 </div>
               </div>
             )}
-            {inputText.trim() && parsedPreview && !parsedPreview.amount.value && (
-              <div className="helper-text-amount">Please include an amount (e.g. "50") to add this expense.</div>
+            {amountWarning && (
+              <div className="helper-text-amount">{amountWarning}</div>
             )}
           </div>
         </div>
