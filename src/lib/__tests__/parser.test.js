@@ -640,6 +640,106 @@ describe('parser › category detection', () => {
   });
 });
 
+// ─── Phase 1.4a vocabulary expansion ────────────────────────────────────────
+// Sample tests covering newly-added keywords. One per category cluster — the
+// dictionary is the source of truth, this just guards a representative pick.
+
+describe('parser › 1.4a vocabulary expansion', () => {
+  // International foods
+  it('detects "sushi" → food', () => {
+    expect(parseExpense('sushi 800').category.value).toBe('food');
+  });
+  it('detects "ramen" → food', () => {
+    expect(parseExpense('ramen 400').category.value).toBe('food');
+  });
+  it('detects "falafel" → food', () => {
+    expect(parseExpense('falafel wrap 250').category.value).toBe('food');
+  });
+
+  // Indian foods
+  it('detects "idli" → food', () => {
+    expect(parseExpense('idli 60').category.value).toBe('food');
+  });
+  it('detects "paratha" → food', () => {
+    expect(parseExpense('paratha 80').category.value).toBe('food');
+  });
+
+  // Food brand chains
+  it('detects "dominos" → food', () => {
+    expect(parseExpense('Spent 500 on dominos').category.value).toBe('food');
+  });
+  it('detects "starbucks" → food', () => {
+    expect(parseExpense('starbucks 300').category.value).toBe('food');
+  });
+
+  // Quick commerce → shopping
+  it('detects "blinkit" → shopping', () => {
+    expect(parseExpense('blinkit 1200').category.value).toBe('shopping');
+  });
+  it('detects "zepto" → shopping', () => {
+    expect(parseExpense('Spent 800 on zepto').category.value).toBe('shopping');
+  });
+  it('detects "bigbasket" → shopping', () => {
+    expect(parseExpense('bigbasket 2500').category.value).toBe('shopping');
+  });
+
+  // Shopping brands
+  it('detects "nykaa" → shopping', () => {
+    expect(parseExpense('nykaa 1500').category.value).toBe('shopping');
+  });
+  it('detects "ajio" → shopping', () => {
+    expect(parseExpense('ajio 2000').category.value).toBe('shopping');
+  });
+
+  // Telecom → bills
+  it('detects "jio" → bills', () => {
+    expect(parseExpense('jio recharge 300').category.value).toBe('bills');
+  });
+  it('detects "airtel" → bills', () => {
+    expect(parseExpense('airtel 500').category.value).toBe('bills');
+  });
+
+  // DTH → bills
+  it('detects "tata sky" → bills', () => {
+    expect(parseExpense('tata sky 400').category.value).toBe('bills');
+  });
+
+  // Streaming → entertainment
+  it('detects "sonyliv" → entertainment', () => {
+    expect(parseExpense('sonyliv 200').category.value).toBe('entertainment');
+  });
+  it('detects "disney" → entertainment', () => {
+    expect(parseExpense('disney subscription 300').category.value).toBe('entertainment');
+  });
+
+  // Edtech → education
+  it('detects "byjus" → education', () => {
+    expect(parseExpense('byjus fees 5000').category.value).toBe('education');
+  });
+  it('detects "unacademy" → education', () => {
+    expect(parseExpense('unacademy 3000').category.value).toBe('education');
+  });
+
+  // Pharmacy → health
+  it('detects "1mg" → health', () => {
+    expect(parseExpense('1mg 500').category.value).toBe('health');
+  });
+  it('detects "pharmeasy" → health', () => {
+    expect(parseExpense('pharmeasy 700').category.value).toBe('health');
+  });
+
+  // Travel booking → transport
+  it('detects "makemytrip" → transport', () => {
+    expect(parseExpense('makemytrip 8000').category.value).toBe('transport');
+  });
+  it('detects "oyo" → transport', () => {
+    expect(parseExpense('oyo 2500').category.value).toBe('transport');
+  });
+  it('detects "redbus" → transport', () => {
+    expect(parseExpense('redbus 600').category.value).toBe('transport');
+  });
+});
+
 // ─── Combined complexity ────────────────────────────────────────────────────
 // Sentences that exercise multiple parser features at once. These catch
 // interaction bugs that isolated tests miss.

@@ -30,6 +30,22 @@ export const CATEGORIES = Object.freeze({
       'pub', 'zomato', 'swiggy', 'milk', 'eggs', 'egg', 'bread', 'paneer',
       'chicken', 'mutton', 'fish', 'cake', 'chocolate', 'dessert', 'desserts',
       'food', 'meal', 'brunch', 'cafe', 'canteen', 'mess',
+      // International foods
+      'sushi', 'taco', 'tacos', 'ramen', 'kebab', 'kebabs', 'pho', 'falafel',
+      'bagel', 'croissant', 'donut', 'donuts', 'sandwich', 'salad', 'pasta',
+      'steak', 'soup', 'curry', 'dumpling', 'burrito', 'gyro', 'shawarma',
+      'hummus', 'nachos',
+      // Indian foods
+      'idli', 'vada', 'upma', 'poha', 'paratha', 'roti', 'naan', 'chaat',
+      'kachori', 'bhel', 'kulfi', 'lassi', 'chutney', 'sabzi',
+      'paani puri', 'pani puri', 'gol gappa',
+      // Food chains
+      'dominos', 'kfc', 'mcdonalds', 'mcd', 'starbucks', 'ccd', 'haldiram',
+      'haldirams', 'bikaner', 'bikanervala',
+      'burger king', 'cafe coffee day', 'barbeque nation', 'bbq nation',
+      // International delivery brands
+      'doordash', 'deliveroo', 'ubereats', 'uber eats', 'just eat',
+      'postmates', 'talabat',
     ],
   },
   transport: {
@@ -40,6 +56,14 @@ export const CATEGORIES = Object.freeze({
       'uber', 'ola', 'auto', 'rickshaw', 'petrol', 'diesel', 'bus', 'train',
       'metro', 'parking', 'toll', 'cab', 'taxi', 'flight', 'airfare',
       'ticket', 'rapido', 'fuel', 'transport', 'travel', 'commute',
+      // International ride-hailing
+      'lyft', 'careem', 'bolt',
+      // Rentals
+      'scooter', 'zoomcar', 'bike rental', 'car rental', 'e-rickshaw',
+      'e rickshaw',
+      // Travel-booking platforms (lodging + travel folded in for simplicity)
+      'makemytrip', 'mmt', 'goibibo', 'ixigo', 'redbus', 'oyo', 'agoda',
+      'airbnb', 'booking.com',
     ],
   },
   shopping: {
@@ -57,6 +81,18 @@ export const CATEGORIES = Object.freeze({
       'cabinet', 'drawer', 'dresser', 'lamp', 'lamps', 'curtains',
       'carpet', 'rug', 'pillow', 'pillows', 'cushion', 'furniture',
       'dining table', 'coffee table',
+      // Quick commerce / groceries
+      'blinkit', 'zepto', 'instamart', 'swiggy instamart', 'bigbasket',
+      'big basket', 'dunzo', 'grofers', 'jiomart', 'jio mart', 'dmart',
+      'd-mart',
+      // Indian shopping brands
+      'nykaa', 'ajio', 'meesho', 'snapdeal', 'lenskart', 'firstcry',
+      'urbanic',
+      // International shopping brands
+      'shein', 'h&m', 'zara', 'uniqlo',
+      // Generic shopping
+      'cosmetics', 'makeup', 'perfume', 'skincare', 'toiletries',
+      'stationery', 'gifts', 'gift',
     ],
   },
   entertainment: {
@@ -67,6 +103,12 @@ export const CATEGORIES = Object.freeze({
       'movie', 'movies', 'netflix', 'tickets', 'games', 'game', 'concert',
       'popcorn', 'spotify', 'hotstar', 'prime', 'youtube', 'subscription',
       'book', 'books', 'magazine', 'gaming', 'entertainment',
+      // Streaming services
+      'sonyliv', 'sony liv', 'zee5', 'jiocinema', 'jio cinema', 'mx player',
+      'disney', 'apple music', 'gaana', 'wynk',
+      // Venues / activities
+      'theater', 'theatre', 'multiplex', 'bowling', 'paintball',
+      'escape room',
     ],
   },
   health: {
@@ -77,6 +119,13 @@ export const CATEGORIES = Object.freeze({
       'medicine', 'medicines', 'doctor', 'pharmacy', 'gym', 'hospital',
       'dentist', 'checkup', 'check-up', 'test', 'lab', 'vitamins',
       'vitamin', 'protein', 'health', 'medical',
+      // Indian pharmacy / health platforms
+      '1mg', 'pharmeasy', 'netmeds', 'apollo', 'practo', 'cult', 'cult.fit',
+      'cure.fit', 'cultfit', 'curefit',
+      // Specialists / diagnostics
+      'physio', 'physiotherapy', 'dental', 'orthopedic', 'dermatologist',
+      'optometry', 'optician', 'eye test', 'blood test', 'x-ray', 'xray',
+      'mri', 'ct scan', 'ultrasound',
     ],
   },
   bills: {
@@ -87,6 +136,13 @@ export const CATEGORIES = Object.freeze({
       'recharge', 'electricity', 'wifi', 'rent', 'emi', 'insurance',
       'water', 'gas', 'maintenance', 'internet', 'broadband', 'postpaid',
       'prepaid', 'bill', 'bills', 'utility',
+      // Indian telecom
+      'jio', 'airtel', 'vi', 'vodafone', 'idea', 'bsnl', 'mtnl',
+      // DTH / TV
+      'tatasky', 'tata sky', 'dish tv', 'dishtv', 'sun direct', 'airtel dth',
+      'dth',
+      // Misc household
+      'cylinder', 'lpg', 'ott',
     ],
   },
   education: {
@@ -97,6 +153,10 @@ export const CATEGORIES = Object.freeze({
       'tuition', 'course', 'courses', 'books', 'exam', 'exams', 'fees',
       'fee', 'coaching', 'class', 'classes', 'school', 'college',
       'university', 'udemy', 'coursera', 'education', 'study',
+      // Indian edtech
+      'byju', 'byjus', 'unacademy', 'vedantu', 'physics wallah', 'pw',
+      // International edtech
+      'khan academy', 'duolingo', 'skillshare', 'masterclass',
     ],
   },
   personal: {
@@ -106,6 +166,8 @@ export const CATEGORIES = Object.freeze({
     keywords: [
       'haircut', 'salon', 'spa', 'grooming', 'laundry', 'dry clean',
       'dryclean', 'personal', 'parlour', 'parlor',
+      'barber', 'manicure', 'pedicure', 'threading', 'waxing', 'facial',
+      'massage',
     ],
   },
   repairs: {
