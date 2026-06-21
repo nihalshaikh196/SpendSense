@@ -348,6 +348,26 @@ describe('parser › date formats', () => {
     expect(r.date.value).toBe('2026-01-05');
   });
 
+  it('honors explicit year in "5th January 2025"', () => {
+    const r = parseExpense('Lunch 400 on 5th January 2025');
+    expect(r.date.value).toBe('2025-01-05');
+  });
+
+  it('honors explicit year in "January 5 2025"', () => {
+    const r = parseExpense('Spent 100 on chai January 5 2025');
+    expect(r.date.value).toBe('2025-01-05');
+  });
+
+  it('honors explicit year in slash date "5/1/2025"', () => {
+    const r = parseExpense('Spent 100 on chai 5/1/2025');
+    expect(r.date.value).toBe('2025-01-05');
+  });
+
+  it('honors 2-digit year in slash date "5/1/25"', () => {
+    const r = parseExpense('Spent 100 on chai 5/1/25');
+    expect(r.date.value).toBe('2025-01-05');
+  });
+
   it('combines amount, item, and date correctly', () => {
     const r = parseExpense('Paid 2000 for groceries yesterday');
     expect(r.amount.value).toBe(2000);
@@ -870,12 +890,80 @@ describe('parser › confidence: overall', () => {
 // Marked .todo() so the suite stays green; convert to .it() when fixed.
 
 describe('parser › Phase 1.3 known weaknesses', () => {
-  it.todo('does not capture location after "at" as a person — "Movie at PVR with Priya"');
-  it.todo('detects multiple amounts and flags as low-confidence — "coffee 50 and croissant 80"');
+  it('does not capture location after "at" as a person — "Movie at PVR with Priya"', () => {
+    const r = parseExpense('Movie at PVR with Priya 500');
+    expect(r.amount.value).toBe(500);
+    expect(r.people.value).toEqual(['Priya']);
+  });
+
+  it('does not capture location after "at" when no person mentioned — "Dinner at Starbucks 200"', () => {
+    const r = parseExpense('Dinner at Starbucks 200');
+    expect(r.amount.value).toBe(200);
+    expect(r.people.value).toEqual([]);
+  });
+
   it.todo('signals confidence:0 when amount is missing — "cab to airport"');
-  it.todo('handles "around 500" and strips qualifier');
-  it.todo('handles "about 100" and strips qualifier');
-  it.todo('handles "roughly 200" and strips qualifier');
+
+  it('flags multiple amounts as low-confidence — "coffee 50 and croissant 80"', () => {
+    const r = parseExpense('coffee 50 and croissant 80');
+    expect(r.amount.value).toBe(50);
+    expect(r.amount.confidence).toBeLessThanOrEqual(0.5);
+    expect(r.amount.confidence).toBeGreaterThan(0);
+  });
+
+  it('flags multiple amounts as low-confidence — "lunch 200 dinner 300"', () => {
+    const r = parseExpense('lunch 200 dinner 300');
+    expect(r.amount.value).toBe(200);
+    expect(r.amount.confidence).toBeLessThanOrEqual(0.5);
+  });
+
+  it('flags multiple amounts as low-confidence — "spent 100 on coffee 200 on lunch"', () => {
+    const r = parseExpense('spent 100 on coffee 200 on lunch');
+    expect(r.amount.value).toBe(100);
+    expect(r.amount.confidence).toBeLessThanOrEqual(0.5);
+  });
+
+  it('keeps single-amount confidence high — regression guard for "coffee 50"', () => {
+    const r = parseExpense('coffee 50');
+    expect(r.amount.value).toBe(50);
+    expect(r.amount.confidence).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it('handles "around 500" — extracts amount, lowers confidence, strips qualifier from item', () => {
+    const r = parseExpense('Spent around 500 on dinner');
+    expect(r.amount.value).toBe(500);
+    expect(r.amount.confidence).toBeLessThanOrEqual(0.7);
+    expect(r.amount.confidence).toBeGreaterThan(0);
+    expect(r.item.value).toBe('dinner');
+  });
+
+  it('handles "about 100" — extracts amount and lowers confidence', () => {
+    const r = parseExpense('about 100 for chai');
+    expect(r.amount.value).toBe(100);
+    expect(r.amount.confidence).toBeLessThanOrEqual(0.7);
+    expect(r.item.value).toBe('chai');
+  });
+
+  it('handles "roughly 200" — extracts amount and lowers confidence', () => {
+    const r = parseExpense('roughly 200 on groceries');
+    expect(r.amount.value).toBe(200);
+    expect(r.amount.confidence).toBeLessThanOrEqual(0.7);
+    expect(r.item.value).toBe('groceries');
+  });
+
+  it('handles "approximately 50" — extracts amount and lowers confidence', () => {
+    const r = parseExpense('approximately 50 on coffee');
+    expect(r.amount.value).toBe(50);
+    expect(r.amount.confidence).toBeLessThanOrEqual(0.7);
+    expect(r.item.value).toBe('coffee');
+  });
+
+  it('handles tilde shorthand "~200" — extracts amount and lowers confidence', () => {
+    const r = parseExpense('~200 on petrol');
+    expect(r.amount.value).toBe(200);
+    expect(r.amount.confidence).toBeLessThanOrEqual(0.7);
+    expect(r.item.value).toBe('petrol');
+  });
 });
 
 // ─── Phase 1.4 Number words (todo) ──────────────────────────────────────────

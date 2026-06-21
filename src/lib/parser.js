@@ -66,6 +66,17 @@ function toDateString(date) {
 }
 
 /**
+ * Normalizes a year string from a date expression. 2-digit years are
+ * mapped to the 2000s (the app's domain — current-era expense tracking).
+ * @param {string} yearStr
+ * @returns {number}
+ */
+function normalizeYear(yearStr) {
+  const y = parseInt(yearStr, 10);
+  return y < 100 ? 2000 + y : y;
+}
+
+/**
  * Resolves a relative or absolute date expression from text.
  * Returns { dateStr, matched } where matched is the substring that was consumed.
  *
@@ -126,20 +137,22 @@ function resolveDate(text, today) {
     return { dateStr: toDateString(d), matched: agoMatch[0] };
   }
 
-  // Absolute: "15th June", "15 June", "June 15", "June 15th"
+  // Absolute: "15th June", "15 June", "June 15", "June 15th", with optional year
+  // ("15th June 2025", "June 15 2025", "June 15, 2025")
   const monthKeys = Object.keys(MONTH_NAMES).join('|');
-  const absDateRegex1 = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${monthKeys})\\b`, 'i');
-  const absDateRegex2 = new RegExp(`\\b(${monthKeys})\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`, 'i');
+  const absDateRegex1 = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${monthKeys})(?:,?\\s+(\\d{2,4}))?\\b`, 'i');
+  const absDateRegex2 = new RegExp(`\\b(${monthKeys})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{2,4}))?\\b`, 'i');
 
   const abs1 = lower.match(absDateRegex1);
   if (abs1) {
     const day = parseInt(abs1[1], 10);
     const month = MONTH_NAMES[abs1[2].toLowerCase()];
+    const explicitYear = abs1[3] ? normalizeYear(abs1[3]) : null;
     if (day >= 1 && day <= 31 && month !== undefined) {
-      const year = today.getFullYear();
+      const year = explicitYear ?? today.getFullYear();
       const d = new Date(year, month, day);
-      // If the date is in the future, assume last year
-      if (d > today) {
+      // Only roll back if year was inferred, not explicitly given
+      if (explicitYear === null && d > today) {
         d.setFullYear(year - 1);
       }
       return { dateStr: toDateString(d), matched: abs1[0] };
@@ -150,25 +163,27 @@ function resolveDate(text, today) {
   if (abs2) {
     const month = MONTH_NAMES[abs2[1].toLowerCase()];
     const day = parseInt(abs2[2], 10);
+    const explicitYear = abs2[3] ? normalizeYear(abs2[3]) : null;
     if (day >= 1 && day <= 31 && month !== undefined) {
-      const year = today.getFullYear();
+      const year = explicitYear ?? today.getFullYear();
       const d = new Date(year, month, day);
-      if (d > today) {
+      if (explicitYear === null && d > today) {
         d.setFullYear(year - 1);
       }
       return { dateStr: toDateString(d), matched: abs2[0] };
     }
   }
 
-  // DD/MM format: "15/06"
-  const slashDate = lower.match(/\b(\d{1,2})\/(\d{1,2})\b/);
+  // DD/MM or DD/MM/YYYY or DD/MM/YY
+  const slashDate = lower.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
   if (slashDate) {
     const day = parseInt(slashDate[1], 10);
     const month = parseInt(slashDate[2], 10) - 1; // 0-indexed
+    const explicitYear = slashDate[3] ? normalizeYear(slashDate[3]) : null;
     if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
-      const year = today.getFullYear();
+      const year = explicitYear ?? today.getFullYear();
       const d = new Date(year, month, day);
-      if (d > today) {
+      if (explicitYear === null && d > today) {
         d.setFullYear(year - 1);
       }
       return { dateStr: toDateString(d), matched: slashDate[0] };
@@ -187,17 +202,44 @@ function extractAmount(text) {
   //   - Decimal part: .50
   const amountRegex = /(?:[₹$€£]\s*)?((?:\d{1,3}(?:,\d{2,3})+|\d+)(?:\.\d{1,2})?)(?:\s*(?:rs|rupees|inr|bucks|dollars|usd|eur|gbp))?\b/gi;
 
+  // Uncertainty qualifier directly preceding the number, e.g.
+  // "around 500", "about 100", "roughly 200", "approximately 50", "~200".
+  // Optional whitespace between qualifier and the rest of the amount span
+  // captures both "around 500" and "~200" naturally.
+  const qualifierRegex = /(around|about|roughly|approximately|approx|approx\.|~)\s*$/i;
+
+  const candidates = [];
   let match;
   while ((match = amountRegex.exec(text)) !== null) {
     const raw = match[1];
     const numStr = raw.replace(/,/g, '');
     const num = parseFloat(numStr);
     if (Number.isFinite(num) && num > 0) {
-      return { amount: num, matched: match[0].trim() };
+      candidates.push({ num, match });
     }
   }
 
-  return null;
+  if (candidates.length === 0) return null;
+
+  const first = candidates[0];
+  // Look at the text immediately before the match for an approx qualifier.
+  // If present, extend `matched` to include it so item-extraction strips it.
+  const before = text.slice(0, first.match.index);
+  const qMatch = before.match(qualifierRegex);
+  let matched = first.match[0].trim();
+  let approximate = false;
+  if (qMatch) {
+    approximate = true;
+    const qStart = before.length - qMatch[0].length;
+    matched = text.slice(qStart, first.match.index + first.match[0].length).trim();
+  }
+
+  return {
+    amount: first.num,
+    matched,
+    approximate,
+    multiple: candidates.length > 1,
+  };
 }
 
 // ─── People Extraction ───────────────────────────────────────────────────────
@@ -432,11 +474,18 @@ export function parseExpense(sentence, defaultCurrency = 'INR') {
   const amountValue = amountResult ? amountResult.amount : null;
   // Confidence factors:
   //   - Missing entirely → 0
+  //   - Approximate qualifier ("around 500", "~200") → 0.7 regardless of currency
+  //   - Multiple amounts in one sentence ("coffee 50 and croissant 80") → 0.5
+  //     (we took the first; user should review)
   //   - Found + explicit currency keyword/symbol nearby → 1.0
   //   - Found but currency was defaulted (no explicit signal) → 0.8
   let amountConfidence;
   if (amountValue === null) {
     amountConfidence = 0;
+  } else if (amountResult.approximate) {
+    amountConfidence = 0.7;
+  } else if (amountResult.multiple) {
+    amountConfidence = 0.5;
   } else if (detectedCurrency) {
     amountConfidence = 1.0;
   } else {
