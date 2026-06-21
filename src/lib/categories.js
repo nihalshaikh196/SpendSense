@@ -51,6 +51,12 @@ export const CATEGORIES = Object.freeze({
       'grocery', 'myntra', 'shirt', 'jeans', 'dress', 'watch', 'bag',
       'electronics', 'phone', 'laptop', 'headphones', 'charger',
       'accessories', 'shopping', 'shop',
+      // Furniture
+      'sofa', 'couch', 'chair', 'chairs', 'table', 'tables', 'desk',
+      'bed', 'mattress', 'shelf', 'shelves', 'bookshelf', 'wardrobe',
+      'cabinet', 'drawer', 'dresser', 'lamp', 'lamps', 'curtains',
+      'carpet', 'rug', 'pillow', 'pillows', 'cushion', 'furniture',
+      'dining table', 'coffee table',
     ],
   },
   entertainment: {
@@ -100,6 +106,20 @@ export const CATEGORIES = Object.freeze({
     keywords: [
       'haircut', 'salon', 'spa', 'grooming', 'laundry', 'dry clean',
       'dryclean', 'personal', 'parlour', 'parlor',
+    ],
+  },
+  repairs: {
+    key: 'repairs',
+    label: 'Repairs',
+    emoji: '🔧',
+    keywords: [
+      'repair', 'repairs', 'servicing', 'fix', 'fixed',
+      'plumber', 'plumbing', 'electrician', 'mechanic',
+      'garage', 'puncture', 'tyre', 'tire',
+      // Multi-word phrases (greedy matching prefers these when present)
+      'ac service', 'ro service', 'car service', 'bike service',
+      'car repair', 'bike repair', 'phone repair', 'laptop repair',
+      'geyser repair', 'appliance repair',
     ],
   },
   other: {

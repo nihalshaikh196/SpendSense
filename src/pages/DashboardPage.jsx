@@ -19,6 +19,7 @@ const CATEGORY_COLORS = {
   bills: '#4d96ff',
   education: '#845ec2',
   personal: '#ff6f91',
+  repairs: '#f97316',
   other: '#8b8d9e'
 };
 

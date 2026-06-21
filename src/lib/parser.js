@@ -495,8 +495,10 @@ export function parseExpense(sentence, defaultCurrency = 'INR') {
   // ── 3. Date ──
   const dateResult = resolveDate(raw, today);
   const dateValue = dateResult ? dateResult.dateStr : toDateString(today);
-  // 1.0 if we matched an explicit date phrase, 0.5 if we defaulted to today.
-  const dateConfidence = dateResult ? 1.0 : 0.5;
+  // Defaulting to today is the dominant correct case for live expense
+  // entry, so we don't penalize it. Underline only fires when we explicitly
+  // need to flag uncertainty (none currently — both branches are confident).
+  const dateConfidence = 1.0;
 
   // ── 4. People ──
   const peopleResult = extractPeople(raw);

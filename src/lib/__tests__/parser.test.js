@@ -257,6 +257,11 @@ describe('parser › date formats', () => {
     expect(r.date.value).toBe('2026-06-15');
   });
 
+  it('keeps date.confidence high when defaulting to today (no underline)', () => {
+    const r = parseExpense('Spent 100 on chai');
+    expect(r.date.confidence).toBeGreaterThanOrEqual(0.7);
+  });
+
   it('resolves "today"', () => {
     const r = parseExpense('Spent 100 on chai today');
     expect(r.date.value).toBe('2026-06-15');
@@ -583,6 +588,56 @@ describe('parser › category detection', () => {
     const r = parseExpense('Spent 250 with friends on movie');
     expect(r.category.value).toBe('entertainment');
   });
+
+  it('detects furniture "table" → shopping', () => {
+    const r = parseExpense('Spent 5000 on table');
+    expect(r.category.value).toBe('shopping');
+  });
+
+  it('detects furniture "sofa" → shopping', () => {
+    const r = parseExpense('Bought a sofa for 25000');
+    expect(r.category.value).toBe('shopping');
+  });
+
+  it('detects furniture "mattress" → shopping', () => {
+    const r = parseExpense('mattress 8000');
+    expect(r.category.value).toBe('shopping');
+  });
+
+  it('detects "plumber" → repairs', () => {
+    const r = parseExpense('Paid 800 to plumber');
+    expect(r.category.value).toBe('repairs');
+  });
+
+  it('detects "electrician" → repairs', () => {
+    const r = parseExpense('Spent 500 on electrician');
+    expect(r.category.value).toBe('repairs');
+  });
+
+  it('detects "ac service" → repairs', () => {
+    const r = parseExpense('Spent 1200 on ac service');
+    expect(r.category.value).toBe('repairs');
+  });
+
+  it('detects vehicle repair "car service" → repairs', () => {
+    const r = parseExpense('Spent 3000 on car service');
+    expect(r.category.value).toBe('repairs');
+  });
+
+  it('detects vehicle repair "bike repair" → repairs', () => {
+    const r = parseExpense('Spent 500 on bike repair');
+    expect(r.category.value).toBe('repairs');
+  });
+
+  it('detects bare "repair" → repairs', () => {
+    const r = parseExpense('Paid 1000 for fridge repair');
+    expect(r.category.value).toBe('repairs');
+  });
+
+  it('detects "fix" → repairs', () => {
+    const r = parseExpense('Paid 800 to fix the geyser');
+    expect(r.category.value).toBe('repairs');
+  });
 });
 
 // ─── Combined complexity ────────────────────────────────────────────────────
@@ -825,9 +880,9 @@ describe('parser › confidence: date', () => {
     expect(r.date.confidence).toBe(1.0);
   });
 
-  it('date.confidence is 0.5 when defaulted to today', () => {
+  it('date.confidence is 1.0 when defaulted to today (no underline)', () => {
     const r = parseExpense('Spent 300 on chai');
-    expect(r.date.confidence).toBe(0.5);
+    expect(r.date.confidence).toBe(1.0);
   });
 });
 
