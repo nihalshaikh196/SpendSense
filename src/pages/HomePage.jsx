@@ -128,7 +128,7 @@ function HomePage() {
                 </div>
               </div>
             )}
-            {inputText.trim() && parsedPreview && !parsedPreview.amount && (
+            {inputText.trim() && parsedPreview && !parsedPreview.amount.value && (
               <div className="helper-text-amount">Please include an amount (e.g. "50") to add this expense.</div>
             )}
           </div>
