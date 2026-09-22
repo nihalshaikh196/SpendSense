@@ -12,7 +12,11 @@ import { detectCategory } from './categories.js';
 
 /** Words to exclude from people extraction */
 const EXCLUDED_PEOPLE = new Set([
-  'everyone', 'all', 'people', 'guys'
+  'everyone', 'all', 'people', 'guys',
+  // Self-references: the patterns below deliberately normalize "I"/"me" into
+  // the name list so the splitter sees a uniform "X and Y", but the speaker is
+  // never someone they spent *with*.
+  'i', 'me', 'myself',
 ]);
 
 /** Prepositions and filler words to strip from item edges */
@@ -356,7 +360,7 @@ function extractItem(text, partsToRemove) {
  * //     item: 'souvenirs', people: [], category: 'other',
  * //     raw: '50 dollars on souvenirs yesterday' }
  */
-export function parseExpense(sentence, defaultCurrency = 'INR') {
+export function parseExpense(sentence, defaultCurrency = 'INR', userName = '') {
   if (!sentence || typeof sentence !== 'string') {
     return {
       amount: null,
@@ -386,14 +390,22 @@ export function parseExpense(sentence, defaultCurrency = 'INR') {
 
   // ── 4. People ──
   const peopleResult = extractPeople(raw);
-  const people = peopleResult.people;
+  const self = userName.trim().toLowerCase();
+  const people = self
+    ? peopleResult.people.filter((p) => p.toLowerCase() !== self)
+    : peopleResult.people;
 
   // ── 5. Item (extract by removing known parts) ──
+  // Longest first: the people match often ends with the amount ("with Sarah
+  // 900"), so removing the short amount first would stop the longer span from
+  // matching and leave the names stranded in the item.
   const removals = [
     amountResult?.matched,
     dateResult?.matched,
     peopleResult.matched ? peopleResult.matched : null,
-  ].filter(Boolean);
+  ]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
 
   const item = extractItem(raw, removals);
 

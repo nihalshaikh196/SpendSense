@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { useExpenses } from '../context/ExpenseContext.jsx';
-import { useSettings } from '../context/SettingsContext.jsx';
-import { formatAmount } from '../lib/currency.js';
-import { getCategoryEmoji, getCategoryLabel, CATEGORIES } from '../lib/categories.js';
-import './HomePage.css'; // Reusing styles from HomePage.css for now
+import { CATEGORIES } from '../lib/categories.js';
+import ExpenseCard from '../components/ExpenseCard.jsx';
+import './HomePage.css';
+import './ExpensesPage.css';
 
 function ExpensesPage() {
   const { expenses, loading, removeExpense, editExpense } = useExpenses();
-  const { currency } = useSettings();
-  
+
   const [editingExpense, setEditingExpense] = useState(null);
   const [deletingExpenseId, setDeletingExpenseId] = useState(null);
   const [editFormData, setEditFormData] = useState({
@@ -42,10 +41,13 @@ function ExpensesPage() {
   };
 
   return (
-    <div className="page-container">
-      <section className="recent-section" style={{ height: '100%', overflowY: 'auto', paddingBottom: '80px' }}>
+    <div className="expenses-page page-container">
+      <section className="recent-section">
         <div className="section-header">
           <h2>All Expenses</h2>
+          {!loading && expenses.length > 0 && (
+            <span className="expenses-count">{expenses.length}</span>
+          )}
         </div>
 
         {loading ? (
@@ -69,56 +71,13 @@ function ExpensesPage() {
         ) : (
           <div className="expense-list">
             {expenses.map((expense, index) => (
-              <div
+              <ExpenseCard
                 key={expense.id}
-                className="glass-card expense-card"
-                style={{ animationDelay: `${index * 50}ms` }}
-              >
-                <div className="expense-card-left">
-                  <div className="expense-emoji">{getCategoryEmoji(expense.category)}</div>
-                  <div className="expense-details">
-                    <div className="expense-title-row">
-                      <span className="expense-title">{expense.item || getCategoryLabel(expense.category)}</span>
-                    </div>
-                    <div className="expense-subtitle">
-                      <span>{expense.date}</span>
-                      {expense.people && expense.people.length > 0 && (
-                        <>
-                          <span>•</span>
-                          <span>{expense.people.join(', ')}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="expense-card-right">
-                  <div className="expense-amount">
-                    {formatAmount(expense.amount, expense.currency)}
-                  </div>
-                  <div className="expense-actions">
-                    <button
-                      className="btn-icon btn-edit"
-                      onClick={() => handleEditClick(expense)}
-                      aria-label="Edit expense"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="18" height="18" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                      </svg>
-                    </button>
-                    <button
-                      className="btn-icon btn-delete"
-                      onClick={() => setDeletingExpenseId(expense.id)}
-                      aria-label="Delete expense"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="18" height="18" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
+                expense={expense}
+                style={{ animationDelay: `${Math.min(index, 12) * 50}ms` }}
+                onEdit={handleEditClick}
+                onDelete={setDeletingExpenseId}
+              />
             ))}
           </div>
         )}

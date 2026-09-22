@@ -4,7 +4,7 @@
  * user name. Persisted to localStorage so preferences survive page refreshes.
  */
 
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback } from 'react';
 
 const LS_CURRENCY_KEY = 'spendsense_currency';
 const LS_USERNAME_KEY = 'spendsense_username';

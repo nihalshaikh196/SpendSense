@@ -1,69 +1,86 @@
 import { collection, doc, setDoc, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import { getExpenses, updateExpense, addExpense, deleteExpense } from '../lib/store';
+import {
+  getExpenses,
+  updateExpense,
+  addExpense,
+  deleteExpenseLocal,
+  getTombstones,
+  clearTombstones,
+} from '../lib/store';
+
+function expensesRef(user) {
+  return collection(db, 'users', user.uid, 'expenses');
+}
 
 /**
- * Pushes all unsynced local expenses to Firestore.
+ * Replays deletions that happened while offline, then pushes every unsynced
+ * local expense. Runs before a pull so the remote is accurate when we
+ * reconcile against it.
  */
 export async function pushUnsyncedToFirestore(user) {
   if (!user) return;
-  const localExpenses = await getExpenses();
-  const unsynced = localExpenses.filter(e => !e.synced);
-  
+
+  const userExpensesRef = expensesRef(user);
+
+  const tombstones = await getTombstones();
+  if (tombstones.length > 0) {
+    const batch = writeBatch(db);
+    for (const { id } of tombstones) {
+      batch.delete(doc(userExpensesRef, id));
+    }
+    await batch.commit();
+    await clearTombstones(tombstones.map((t) => t.id));
+  }
+
+  const unsynced = (await getExpenses()).filter((e) => !e.synced);
   if (unsynced.length === 0) return;
 
   const batch = writeBatch(db);
-  const userExpensesRef = collection(db, 'users', user.uid, 'expenses');
+  for (const exp of unsynced) {
+    batch.set(doc(userExpensesRef, exp.id), { ...exp, synced: true });
+  }
+  await batch.commit();
 
   for (const exp of unsynced) {
-    const docRef = doc(userExpensesRef, exp.id);
-    const dataToSync = { ...exp, synced: true };
-    batch.set(docRef, dataToSync);
-  }
-
-  try {
-    await batch.commit();
-    // Mark as synced locally
-    for (const exp of unsynced) {
-      await updateExpense(exp.id, { synced: true });
-    }
-    console.log(`Synced ${unsynced.length} records to Firestore`);
-  } catch (error) {
-    console.error("Error syncing to Firestore:", error);
+    await updateExpense(exp.id, { synced: true });
   }
 }
 
 /**
- * Pulls all expenses from Firestore and merges them into IndexedDB.
- * Simple last-write-wins by createdAt.
+ * Pulls the remote collection and reconciles it into IndexedDB.
+ *
+ * Firestore is treated as authoritative for records already marked synced:
+ * if such a record is absent remotely it was deleted on another device, so it
+ * is removed here too. Unsynced local records are never touched — they are
+ * pending uploads, not stale copies.
  */
 export async function pullFromFirestore(user) {
   if (!user) return;
-  const userExpensesRef = collection(db, 'users', user.uid, 'expenses');
-  
-  try {
-    const querySnapshot = await getDocs(userExpensesRef);
-    const remoteDocs = querySnapshot.docs.map(doc => doc.data());
-    
-    const localExpenses = await getExpenses();
-    const localMap = new Map(localExpenses.map(e => [e.id, e]));
 
-    for (const remote of remoteDocs) {
-      const local = localMap.get(remote.id);
-      if (!local) {
-        // Doesn't exist locally, add it
-        await addExpense({ ...remote, synced: true });
-      } else {
-        // Compare createdAt or updatedAt
-        // For simplicity, if remote exists, we assume it's up to date unless local is unsynced and newer.
-        // If local is unsynced, we push it later. If local is synced, remote is identical or newer.
-        if (local.synced) {
-          await updateExpense(local.id, { ...remote, synced: true });
-        }
-      }
+  const snapshot = await getDocs(expensesRef(user));
+  const remoteDocs = snapshot.docs.map((d) => d.data());
+  const remoteIds = new Set(remoteDocs.map((d) => d.id));
+
+  const pendingDeletes = new Set((await getTombstones()).map((t) => t.id));
+  const localExpenses = await getExpenses();
+  const localMap = new Map(localExpenses.map((e) => [e.id, e]));
+
+  for (const remote of remoteDocs) {
+    if (pendingDeletes.has(remote.id)) continue;
+
+    const local = localMap.get(remote.id);
+    if (!local) {
+      await addExpense({ ...remote, synced: true });
+    } else if (local.synced) {
+      await updateExpense(local.id, { ...remote, synced: true });
     }
-  } catch (error) {
-    console.error("Error pulling from Firestore:", error);
+  }
+
+  for (const local of localExpenses) {
+    if (local.synced && !remoteIds.has(local.id)) {
+      await deleteExpenseLocal(local.id);
+    }
   }
 }
 
@@ -72,29 +89,22 @@ export async function pullFromFirestore(user) {
  */
 export async function syncSingleExpense(user, expense) {
   if (!user) return;
-  try {
-    const docRef = doc(db, 'users', user.uid, 'expenses', expense.id);
-    const dataToSync = { ...expense, synced: true };
-    await setDoc(docRef, dataToSync);
-    
-    // Update local store to mark as synced
-    await updateExpense(expense.id, { synced: true });
-    console.log(`Synced expense ${expense.id} to Firestore`);
-  } catch (error) {
-    console.error(`Error syncing expense ${expense.id} to Firestore:`, error);
-  }
+
+  await setDoc(doc(db, 'users', user.uid, 'expenses', expense.id), {
+    ...expense,
+    synced: true,
+  });
+  await updateExpense(expense.id, { synced: true });
 }
 
 /**
- * Syncs the deletion of an expense to Firestore immediately.
+ * Syncs the deletion of an expense to Firestore immediately. On success the
+ * tombstone is cleared; if it throws, the tombstone survives and the next
+ * pushUnsyncedToFirestore retries the delete.
  */
 export async function syncDeleteExpense(user, expenseId) {
   if (!user) return;
-  try {
-    const docRef = doc(db, 'users', user.uid, 'expenses', expenseId);
-    await deleteDoc(docRef);
-    console.log(`Deleted expense ${expenseId} from Firestore`);
-  } catch (error) {
-    console.error(`Error deleting expense ${expenseId} from Firestore:`, error);
-  }
+
+  await deleteDoc(doc(db, 'users', user.uid, 'expenses', expenseId));
+  await clearTombstones([expenseId]);
 }

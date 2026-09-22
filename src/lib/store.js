@@ -10,8 +10,9 @@ import { v4 as uuidv4 } from 'uuid';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DB_NAME = 'ExpenseTrackerDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'expenses';
+const TOMBSTONE_STORE = 'tombstones';
 
 /**
  * Cached database connection. Reused across calls to avoid
@@ -64,6 +65,12 @@ export async function initDB() {
         store.createIndex('date', 'date', { unique: false });
         store.createIndex('category', 'category', { unique: false });
         store.createIndex('createdAt', 'createdAt', { unique: false });
+      }
+
+      // v2: records deleted while offline, so the next sync can delete them
+      // remotely instead of the next pull resurrecting them.
+      if (!db.objectStoreNames.contains(TOMBSTONE_STORE)) {
+        db.createObjectStore(TOMBSTONE_STORE, { keyPath: 'id' });
       }
     };
 
@@ -300,7 +307,8 @@ export async function updateExpense(id, updates) {
 }
 
 /**
- * Deletes an expense from the database.
+ * Deletes an expense from the database and records a tombstone so the
+ * deletion can be replayed against Firestore on the next sync.
  *
  * @param {string} id - The expense UUID to delete
  * @returns {Promise<void>}
@@ -315,7 +323,7 @@ export async function deleteExpense(id) {
   }
 
   const db = await initDB();
-  const tx = db.transaction(STORE_NAME, 'readwrite');
+  const tx = db.transaction([STORE_NAME, TOMBSTONE_STORE], 'readwrite');
   const store = tx.objectStore(STORE_NAME);
 
   // Verify the expense exists before deleting
@@ -325,6 +333,76 @@ export async function deleteExpense(id) {
   }
 
   store.delete(id);
+  tx.objectStore(TOMBSTONE_STORE).put({ id, deletedAt: Date.now() });
+  await promisifyTransaction(tx);
+}
+
+/**
+ * Removes an expense locally without recording a tombstone. Used when the
+ * pull already knows the record is gone remotely — writing a tombstone there
+ * would push a redundant delete back to a document that no longer exists.
+ *
+ * @param {string} id - The expense UUID to remove
+ * @returns {Promise<void>}
+ */
+export async function deleteExpenseLocal(id) {
+  if (!id) return;
+
+  const db = await initDB();
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  tx.objectStore(STORE_NAME).delete(id);
+  await promisifyTransaction(tx);
+}
+
+/**
+ * Deletes every expense, recording a tombstone for each so the wipe
+ * propagates to Firestore on the next sync instead of being undone by it.
+ *
+ * @returns {Promise<number>} How many expenses were removed
+ */
+export async function clearAllExpenses() {
+  const db = await initDB();
+  const tx = db.transaction([STORE_NAME, TOMBSTONE_STORE], 'readwrite');
+  const store = tx.objectStore(STORE_NAME);
+  const tombstones = tx.objectStore(TOMBSTONE_STORE);
+
+  const ids = await promisifyRequest(store.getAllKeys());
+  const deletedAt = Date.now();
+  for (const id of ids) {
+    tombstones.put({ id, deletedAt });
+  }
+  store.clear();
+
+  await promisifyTransaction(tx);
+  return ids.length;
+}
+
+// ─── Tombstones ──────────────────────────────────────────────────────────────
+
+/**
+ * Returns all pending deletion tombstones.
+ * @returns {Promise<Array<{ id: string, deletedAt: number }>>}
+ */
+export async function getTombstones() {
+  const db = await initDB();
+  const tx = db.transaction(TOMBSTONE_STORE, 'readonly');
+  return promisifyRequest(tx.objectStore(TOMBSTONE_STORE).getAll());
+}
+
+/**
+ * Clears tombstones whose deletions have been applied remotely.
+ * @param {string[]} ids
+ * @returns {Promise<void>}
+ */
+export async function clearTombstones(ids) {
+  if (!ids?.length) return;
+
+  const db = await initDB();
+  const tx = db.transaction(TOMBSTONE_STORE, 'readwrite');
+  const store = tx.objectStore(TOMBSTONE_STORE);
+  for (const id of ids) {
+    store.delete(id);
+  }
   await promisifyTransaction(tx);
 }
 

@@ -16,7 +16,8 @@ export function ExpenseProvider({ children }) {
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
-  
+  const [syncError, setSyncError] = useState(null);
+
   const { user } = useAuth();
 
   const refreshExpenses = useCallback(async () => {
@@ -31,77 +32,62 @@ export function ExpenseProvider({ children }) {
     }
   }, []);
 
-  // Run initial sync when user logs in
-  useEffect(() => {
-    if (user) {
-      const syncData = async () => {
-        setIsSyncing(true);
-        try {
-          await pullFromFirestore(user);
-          await pushUnsyncedToFirestore(user);
-          await refreshExpenses();
-        } catch (e) {
-          console.error("Sync error:", e);
-        } finally {
-          setIsSyncing(false);
-        }
-      };
-      syncData();
+  const fullSync = useCallback(async () => {
+    if (!user) return;
+    setIsSyncing(true);
+    try {
+      // Push first: replays offline deletions and uploads pending records so
+      // the pull reconciles against an accurate remote.
+      await pushUnsyncedToFirestore(user);
+      await pullFromFirestore(user);
+      await refreshExpenses();
+      setSyncError(null);
+    } catch (e) {
+      console.error('Sync error:', e);
+      setSyncError(e.message || 'Sync failed');
+    } finally {
+      setIsSyncing(false);
     }
   }, [user, refreshExpenses]);
 
-  const addNewExpense = useCallback(async (parsedData) => {
-    try {
-      const saved = await addExpense(parsedData);
-      setExpenses((prev) => [saved, ...prev]);
-      
-      if (user) {
-        setIsSyncing(true);
-        syncSingleExpense(user, saved)
-          .catch(console.error)
-          .finally(() => setIsSyncing(false));
-      }
-      return saved;
-    } catch (err) {
-      console.error('Failed to add expense:', err);
-      throw err;
-    }
+  useEffect(() => {
+    const run = async () => { await fullSync(); };
+    run();
+  }, [fullSync]);
+
+  // Fire-and-forget sync for a single record. Failures are surfaced but never
+  // block the local write, which has already succeeded.
+  const syncInBackground = useCallback((run) => {
+    if (!user) return;
+    setIsSyncing(true);
+    run()
+      .then(() => setSyncError(null))
+      .catch((err) => {
+        console.error('Sync failed:', err);
+        setSyncError(err.message || 'Sync failed');
+      })
+      .finally(() => setIsSyncing(false));
   }, [user]);
+
+  const addNewExpense = useCallback(async (parsedData) => {
+    const saved = await addExpense(parsedData);
+    setExpenses((prev) => [saved, ...prev]);
+    syncInBackground(() => syncSingleExpense(user, saved));
+    return saved;
+  }, [user, syncInBackground]);
 
   const removeExpense = useCallback(async (id) => {
-    try {
-      await deleteExpense(id);
-      setExpenses((prev) => prev.filter((e) => e.id !== id));
-      
-      if (user) {
-        setIsSyncing(true);
-        syncDeleteExpense(user, id)
-          .catch(console.error)
-          .finally(() => setIsSyncing(false));
-      }
-    } catch (err) {
-      console.error('Failed to delete expense:', err);
-      throw err;
-    }
-  }, [user]);
+    await deleteExpense(id);
+    setExpenses((prev) => prev.filter((e) => e.id !== id));
+    syncInBackground(() => syncDeleteExpense(user, id));
+  }, [user, syncInBackground]);
 
   const editExpense = useCallback(async (id, updates) => {
-    try {
-      const updated = await updateExpense(id, {...updates, synced: false});
-      setExpenses((prev) => prev.map((e) => (e.id === id ? updated : e)));
-      
-      if (user) {
-        setIsSyncing(true);
-        syncSingleExpense(user, updated)
-          .catch(console.error)
-          .finally(() => setIsSyncing(false));
-      }
-      return updated;
-    } catch (err) {
-      console.error('Failed to edit expense:', err);
-      throw err;
-    }
-  }, [user]);
+    const updated = await updateExpense(id, { ...updates, synced: false });
+    setExpenses((prev) => prev.map((e) => (e.id === id ? updated : e)));
+    syncInBackground(() => syncSingleExpense(user, updated));
+    return updated;
+  }, [user, syncInBackground]);
 
   useEffect(() => {
     initDB()
@@ -113,7 +99,7 @@ export function ExpenseProvider({ children }) {
   }, [refreshExpenses]);
 
   return (
-    <ExpenseContext.Provider value={{ expenses, loading, isSyncing, addNewExpense, removeExpense, editExpense, refreshExpenses }}>
+    <ExpenseContext.Provider value={{ expenses, loading, isSyncing, syncError, addNewExpense, removeExpense, editExpense, refreshExpenses, retrySync: fullSync }}>
       {children}
     </ExpenseContext.Provider>
   );

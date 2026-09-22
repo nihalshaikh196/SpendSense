@@ -133,9 +133,11 @@ function DashboardPage() {
       const labels = Array(daysInMonth).fill('').map((_, i) => `${i + 1}`);
 
       expenses.forEach(exp => {
-        const d = new Date(exp.date);
-        if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
-          const dayIdx = d.getDate() - 1;
+        // "2026-09-22" through the Date constructor is parsed as UTC midnight,
+        // which reads back as the previous day west of UTC. Split it instead.
+        const [y, m, day] = (exp.date || '').split('-').map(Number);
+        if (m - 1 === currentMonth && y === currentYear) {
+          const dayIdx = day - 1;
           if (dayIdx >= 0 && dayIdx < daysInMonth) {
             dailyTotals[dayIdx] += exp.amount;
           }

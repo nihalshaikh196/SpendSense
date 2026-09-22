@@ -3,11 +3,11 @@ import { useExpenses } from '../context/ExpenseContext.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { CURRENCIES } from '../lib/currency.js';
-import { getExpenses } from '../lib/store.js';
+import { getExpenses, clearAllExpenses } from '../lib/store.js';
 import './SettingsPage.css';
 
 function SettingsPage() {
-  const { refreshExpenses, isSyncing } = useExpenses();
+  const { refreshExpenses, isSyncing, syncError, retrySync } = useExpenses();
   const { currency, setCurrency, userName, setUserName } = useSettings();
   const { user, loginWithGoogle, logout } = useAuth();
   const [localName, setLocalName] = useState(userName);
@@ -26,16 +26,23 @@ function SettingsPage() {
 
       // Headers
       const headers = ['Date', 'Item', 'Amount', 'Currency', 'Category', 'People', 'Raw Input'];
-      
-      // Rows
+
+      // Spreadsheets execute cells beginning with = + - @, and item/raw are
+      // free text, so prefix a quote to force them to stay literal.
+      const csvCell = (value) => {
+        const str = String(value ?? '');
+        const safe = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+        return `"${safe.replace(/"/g, '""')}"`;
+      };
+
       const rows = allExpenses.map(exp => [
-        exp.date,
-        `"${(exp.item || '').replace(/"/g, '""')}"`, // escape quotes
+        csvCell(exp.date),
+        csvCell(exp.item),
         exp.amount,
-        exp.currency,
-        exp.category,
-        `"${(exp.people || []).join(', ')}"`,
-        `"${(exp.raw || '').replace(/"/g, '""')}"`
+        csvCell(exp.currency),
+        csvCell(exp.category),
+        csvCell((exp.people || []).join(', ')),
+        csvCell(exp.raw)
       ]);
 
       const csvContent = [
@@ -58,27 +65,17 @@ function SettingsPage() {
   };
 
   const handleClearData = async () => {
-    if (window.confirm("Are you sure you want to delete ALL your expenses? This cannot be undone.")) {
-      try {
-        // We delete directly from IndexedDB bypassing context to clear all at once
-        const db = await new Promise((resolve, reject) => {
-          const req = indexedDB.open('ExpenseTrackerDB', 1);
-          req.onsuccess = () => resolve(req.result);
-          req.onerror = () => reject(req.error);
-        });
-        
-        const tx = db.transaction('expenses', 'readwrite');
-        const store = tx.objectStore('expenses');
-        const clearReq = store.clear();
-        
-        clearReq.onsuccess = () => {
-          refreshExpenses();
-          alert("All data cleared successfully.");
-        };
-      } catch (err) {
-        console.error('Failed to clear data', err);
-        alert('Failed to clear data.');
-      }
+    if (!window.confirm("Are you sure you want to delete ALL your expenses? This cannot be undone.")) {
+      return;
+    }
+    try {
+      const removed = await clearAllExpenses();
+      await refreshExpenses();
+      if (user) await retrySync();
+      alert(`Cleared ${removed} expense${removed === 1 ? '' : 's'}.`);
+    } catch (err) {
+      console.error('Failed to clear data', err);
+      alert('Failed to clear data.');
     }
   };
 
@@ -116,9 +113,13 @@ function SettingsPage() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 {isSyncing ? (
-                  <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Syncing... 🔄</span>
+                  <span className="sync-state">Syncing… 🔄</span>
+                ) : syncError ? (
+                  <button className="sync-state sync-state-error" onClick={retrySync} title={syncError}>
+                    Sync failed — retry
+                  </button>
                 ) : (
-                  <span style={{ fontSize: '0.875rem', color: 'var(--color-success)' }}>Synced ☁️✓</span>
+                  <span className="sync-state sync-state-ok">Synced ☁️✓</span>
                 )}
                 <button className="btn-secondary" onClick={logout}>Sign Out</button>
               </div>

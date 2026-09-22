@@ -1,0 +1,18 @@
+.expenses-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  padding: var(--space-2xs) var(--space-sm);
+}
+
+/* Two columns of cards once there is room for them side by side. */
+@media (min-width: 1024px) {
+  .expenses-page .expense-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+    gap: var(--space-md);
+  }
+}

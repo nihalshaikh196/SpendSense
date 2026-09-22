@@ -1,15 +1,22 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { useExpenses } from '../context/ExpenseContext.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { parseExpense } from '../lib/parser.js';
 import { formatAmount } from '../lib/currency.js';
-import { getCategoryEmoji, getCategoryLabel, CATEGORIES } from '../lib/categories.js';
+import { getCategoryEmoji, getCategoryLabel } from '../lib/categories.js';
+import ExpenseCard from '../components/ExpenseCard.jsx';
 import './HomePage.css';
 
+function todayString() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function HomePage() {
-  const { addNewExpense } = useExpenses();
-  const { currency } = useSettings();
+  const { addNewExpense, expenses } = useExpenses();
+  const { currency, userName } = useSettings();
   const { user } = useAuth();
   const [inputText, setInputText] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -29,12 +36,30 @@ function HomePage() {
   // Parse input on the fly
   const parsedPreview = useMemo(() => {
     if (!inputText.trim()) return null;
-    return parseExpense(inputText, currency);
-  }, [inputText, currency]);
+    return parseExpense(inputText, currency, userName);
+  }, [inputText, currency, userName]);
+
+  const summary = useMemo(() => {
+    const today = todayString();
+    const monthPrefix = today.slice(0, 7);
+    let todayTotal = 0;
+    let monthTotal = 0;
+    for (const e of expenses) {
+      const amount = e.amount || 0;
+      if (e.date === today) todayTotal += amount;
+      if (e.date?.startsWith(monthPrefix)) monthTotal += amount;
+    }
+    return {
+      today: Math.round(todayTotal * 100) / 100,
+      month: Math.round(monthTotal * 100) / 100,
+    };
+  }, [expenses]);
+
+  const recent = useMemo(() => expenses.slice(0, 5), [expenses]);
 
   const handleAddExpense = async () => {
     if (!parsedPreview || !parsedPreview.amount) return;
-    
+
     setIsAdding(true);
     try {
       await addNewExpense(parsedPreview);
@@ -61,7 +86,7 @@ function HomePage() {
           <h1 className="app-logo-text">SpendSense</h1>
           {!user && <span className="local-mode-badge" title="Expenses are saved on this device. Login in Settings to sync.">☁️ Local Mode</span>}
         </div>
-        
+
         <div className="expense-input-wrapper">
           <div className={`expense-input-container ${inputText.trim() ? 'has-input' : ''}`}>
             <textarea
@@ -124,6 +149,42 @@ function HomePage() {
               <div className="helper-text-amount">Please include an amount (e.g. "50") to add this expense.</div>
             )}
           </div>
+        </div>
+      </section>
+
+      {/* ─── At-a-glance panel (wide screens only) ─── */}
+      <section className="home-panel">
+        <div className="home-summary">
+          <div className="glass-card home-stat">
+            <span className="home-stat-label">Today</span>
+            <span className="home-stat-value">{formatAmount(summary.today, currency)}</span>
+          </div>
+          <div className="glass-card home-stat">
+            <span className="home-stat-label">This Month</span>
+            <span className="home-stat-value">{formatAmount(summary.month, currency)}</span>
+          </div>
+        </div>
+
+        <div className="home-recent">
+          <div className="section-header">
+            <h2>Recent</h2>
+            <Link to="/expenses" className="home-see-all">See all</Link>
+          </div>
+          {recent.length > 0 ? (
+            <div className="expense-list">
+              {recent.map((expense, index) => (
+                <ExpenseCard
+                  key={expense.id}
+                  expense={expense}
+                  style={{ animationDelay: `${index * 50}ms` }}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="glass-card home-recent-empty">
+              <span className="empty-state-text">Nothing logged yet — type above to add your first expense.</span>
+            </div>
+          )}
         </div>
       </section>
     </div>
