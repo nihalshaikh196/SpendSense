@@ -66,6 +66,40 @@
   margin-top: var(--space-md);
 }
 
+.modal-actions-split {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-actions-group {
+  display: flex;
+  gap: var(--space-md);
+}
+
+/* Two short fields side by side (date + category), stacked on a phone
+   where a date input can't fit in half the width */
+.form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-md);
+}
+
+@media (min-width: 480px) {
+  .form-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.edit-original {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.edit-original q {
+  color: var(--text-primary);
+}
+
 .btn-confirm-danger {
   background: rgba(239, 68, 68, 0.2);
   color: #ef4444;

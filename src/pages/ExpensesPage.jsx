@@ -1,14 +1,23 @@
-import { useId, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useId, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useExpenses } from '../context/ExpenseContext.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
+import { useExpenseActions } from '../hooks/useExpenseActions.js';
 import { CATEGORIES, getCategoryLabel } from '../lib/categories.js';
-import { CURRENCIES, formatAmount, formatTotals } from '../lib/currency.js';
-import { currencyBreakdown, formatDay, sumByCurrency } from '../lib/analytics.js';
-import { logError } from '../lib/log.js';
+import { CURRENCIES, formatTotals } from '../lib/currency.js';
+import {
+  addDays,
+  currencyBreakdown,
+  currentPeriod,
+  periodBounds,
+  relativeDay,
+  shiftPeriod,
+  sumByCurrency,
+  todayString,
+} from '../lib/analytics.js';
+import { downloadCsv, expensesToCsv } from '../lib/csv.js';
 import ExpenseCard from '../components/ExpenseCard.jsx';
-import Modal from '../components/Modal.jsx';
-import './HomePage.css';
+import EditExpenseModal from '../components/EditExpenseModal.jsx';
 import './ExpensesPage.css';
 
 const SORTS = {
@@ -18,7 +27,8 @@ const SORTS = {
   lowest: { label: 'Lowest amount', compare: (a, b) => a.amount - b.amount },
 };
 
-const FILTER_PARAMS = ['category', 'currency', 'from', 'to', 'sort'];
+/** Rendered in pages so a long history doesn't mount a thousand cards at once. */
+const PAGE_SIZE = 60;
 
 /** Letters and digits only, so "t shirt" finds "T-shirt". */
 const normalize = (text) => text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -30,129 +40,40 @@ function matchesSearch(expense, needle) {
   return haystack.includes(needle) || normalize(haystack).includes(normalize(needle));
 }
 
-function EditExpenseModal({ expense, onSave, onClose }) {
-  const ids = useId();
-  const amountRef = useRef(null);
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    amount: String(expense.amount),
-    item: expense.item,
-    date: expense.date,
-    category: expense.category,
-    people: (expense.people || []).join(', '),
-  });
-
-  const update = (field) => (e) => setForm({ ...form, [field]: e.target.value });
-
-  const save = async (e) => {
-    e.preventDefault();
-    const amount = parseFloat(form.amount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError('Enter an amount greater than zero.');
-      return;
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.date)) {
-      setError('Choose a date.');
-      return;
-    }
-    setSaving(true);
-    try {
-      await onSave({
-        amount: Math.round(amount * 100) / 100,
-        item: form.item.trim(),
-        date: form.date,
-        category: form.category,
-        people: form.people.split(',').map((p) => p.trim()).filter(Boolean),
-      });
-      onClose();
-    } catch (err) {
-      logError('Failed to save edit', err);
-      setError('Couldn’t save the change. Try again.');
-      setSaving(false);
-    }
+/** One-tap date ranges. "This month" matches the Dashboard's drill-down links. */
+function datePresets(today) {
+  const month = currentPeriod('month');
+  const range = (period) => {
+    const { start, end } = periodBounds(period);
+    return { from: start, to: end };
   };
-
-  return (
-    <Modal title="Edit expense" onClose={onClose} initialFocusRef={amountRef}>
-      <form className="edit-form" onSubmit={save} noValidate>
-        <div className="form-group">
-          <label htmlFor={`${ids}-amount`}>Amount ({expense.currency})</label>
-          <input
-            id={`${ids}-amount`}
-            ref={amountRef}
-            type="number"
-            inputMode="decimal"
-            min="0.01"
-            step="any"
-            value={form.amount}
-            onChange={update('amount')}
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor={`${ids}-item`}>Item</label>
-          <input id={`${ids}-item`} type="text" maxLength={200} value={form.item} onChange={update('item')} />
-        </div>
-        <div className="form-group">
-          <label htmlFor={`${ids}-date`}>Date</label>
-          <input id={`${ids}-date`} type="date" value={form.date} onChange={update('date')} />
-        </div>
-        <div className="form-group">
-          <label htmlFor={`${ids}-category`}>Category</label>
-          <select id={`${ids}-category`} value={form.category} onChange={update('category')}>
-            {Object.values(CATEGORIES).map((cat) => (
-              <option key={cat.key} value={cat.key}>
-                {cat.emoji} {cat.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="form-group">
-          <label htmlFor={`${ids}-people`}>People (comma-separated)</label>
-          <input id={`${ids}-people`} type="text" maxLength={300} value={form.people} onChange={update('people')} />
-        </div>
-        {error && <div className="form-error" role="alert">{error}</div>}
-        <div className="modal-actions">
-          <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn-accent" disabled={saving}>
-            {saving ? 'Saving…' : 'Save changes'}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
+  return [
+    { id: 'all', label: 'All time', from: '', to: '' },
+    { id: 'month', label: 'This month', ...range(month) },
+    { id: 'last-month', label: 'Last month', ...range(shiftPeriod(month, -1)) },
+    { id: 'last-30', label: 'Last 30 days', from: addDays(today, -29), to: today },
+    { id: 'year', label: 'This year', ...range(currentPeriod('year')) },
+  ];
 }
 
-function DeleteExpenseModal({ expense, onConfirm, onClose }) {
-  const cancelRef = useRef(null);
-  return (
-    <Modal
-      title="Delete expense?"
-      onClose={onClose}
-      initialFocusRef={cancelRef}
-      className="modal-center"
-      actions={
-        <>
-          <button ref={cancelRef} type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button type="button" className="btn-accent btn-confirm-danger" onClick={onConfirm}>Delete</button>
-        </>
-      }
-    >
-      <p>
-        <strong>{expense.item || getCategoryLabel(expense.category)}</strong> ·{' '}
-        {formatAmount(expense.amount, expense.currency)} on {formatDay(expense.date)}.
-        <br />
-        This can’t be undone.
-      </p>
-    </Modal>
-  );
+/** Consecutive expenses on the same date, for day headers. */
+function groupByDay(list) {
+  const groups = [];
+  for (const expense of list) {
+    const last = groups[groups.length - 1];
+    if (last && last.date === expense.date) last.items.push(expense);
+    else groups.push({ date: expense.date, items: [expense] });
+  }
+  return groups;
 }
 
 function ExpensesPage() {
-  const { expenses, loading, removeExpense, editExpense } = useExpenses();
+  const { expenses, loading } = useExpenses();
   const { currency: preferredCurrency } = useSettings();
+  const { deleteWithUndo, saveWithUndo } = useExpenseActions();
   const [searchParams, setSearchParams] = useSearchParams();
   const ids = useId();
+  const today = todayString();
 
   const q = searchParams.get('q') ?? '';
   const category = searchParams.get('category') ?? '';
@@ -161,12 +82,25 @@ function ExpensesPage() {
   const to = searchParams.get('to') ?? '';
   const sort = SORTS[searchParams.get('sort')] ? searchParams.get('sort') : 'newest';
 
-  const activeFilters = FILTER_PARAMS.filter((p) => searchParams.get(p) && !(p === 'sort' && sort === 'newest')).length;
-  const [filtersOpen, setFiltersOpen] = useState(activeFilters > 0);
+  const presets = useMemo(() => datePresets(today), [today]);
+  const activePreset = presets.find((p) => p.from === from && p.to === to);
+  const customDates = !activePreset;
+
+  // What the Filters button hides; chips already show their own state.
+  const panelFilters = [Boolean(currency), customDates, sort !== 'newest'].filter(Boolean).length;
+  const [filtersOpen, setFiltersOpen] = useState(panelFilters > 0);
   const [editing, setEditing] = useState(null);
-  const [deleting, setDeleting] = useState(null);
 
   const currencies = useMemo(() => currencyBreakdown(expenses).map((c) => c.currency), [expenses]);
+
+  // Only categories that have been used, most used first.
+  const categoryChips = useMemo(() => {
+    const counts = new Map();
+    for (const e of expenses) counts.set(e.category, (counts.get(e.category) || 0) + 1);
+    return Object.values(CATEGORIES)
+      .filter((c) => counts.has(c.key))
+      .sort((a, b) => counts.get(b.key) - counts.get(a.key));
+  }, [expenses]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -182,12 +116,30 @@ function ExpensesPage() {
       .sort(SORTS[sort].compare);
   }, [expenses, q, category, currency, from, to, sort]);
 
-  const setParam = (name, value) => {
+  // Paging resets whenever the filters change.
+  const filterKey = searchParams.toString();
+  const [paging, setPaging] = useState({ key: filterKey, limit: PAGE_SIZE });
+  const limit = paging.key === filterKey ? paging.limit : PAGE_SIZE;
+
+  const byDate = sort === 'newest' || sort === 'oldest';
+  let visible = filtered.slice(0, limit);
+  // Never cut a day in half: its header total must match the cards under it.
+  if (byDate && visible.length && visible.length < filtered.length) {
+    const lastDate = visible[visible.length - 1].date;
+    let end = visible.length;
+    while (end < filtered.length && filtered[end].date === lastDate) end += 1;
+    visible = filtered.slice(0, end);
+  }
+  const remaining = filtered.length - visible.length;
+
+  const setParams = (changes) => {
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        if (value) next.set(name, value);
-        else next.delete(name);
+        for (const [name, value] of Object.entries(changes)) {
+          if (value) next.set(name, value);
+          else next.delete(name);
+        }
         return next;
       },
       { replace: true },
@@ -195,7 +147,23 @@ function ExpensesPage() {
   };
 
   const clearAll = () => setSearchParams({}, { replace: true });
-  const isFiltered = Boolean(q) || activeFilters > 0;
+  const isFiltered = Boolean(q) || Boolean(category) || panelFilters > 0 || activePreset?.id !== 'all';
+
+  const exportFiltered = () => {
+    downloadCsv(`spendsense_expenses_${today}.csv`, expensesToCsv(filtered));
+  };
+
+  const renderCard = (expense, index, showDate) => (
+    <ExpenseCard
+      key={expense.id}
+      expense={expense}
+      today={today}
+      showDate={showDate}
+      style={{ animationDelay: `${Math.min(index, 10) * 30}ms` }}
+      onOpen={setEditing}
+      onDelete={deleteWithUndo}
+    />
+  );
 
   return (
     <div className="expenses-page page-container">
@@ -206,7 +174,7 @@ function ExpensesPage() {
         </div>
 
         {!loading && expenses.length > 0 && (
-          <>
+          <div className="expenses-controls">
             <div className="expenses-toolbar">
               <div className="search-field">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
@@ -218,38 +186,91 @@ function ExpensesPage() {
                   placeholder="Search items, people, notes…"
                   aria-label="Search expenses"
                   value={q}
-                  onChange={(e) => setParam('q', e.target.value)}
+                  onChange={(e) => setParams({ q: e.target.value })}
                 />
               </div>
               <button
                 type="button"
-                className={`btn-secondary filter-toggle ${activeFilters ? 'has-filters' : ''}`}
+                className={`btn-secondary filter-toggle ${panelFilters ? 'has-filters' : ''}`}
                 aria-expanded={filtersOpen}
                 aria-controls={`${ids}-filters`}
                 onClick={() => setFiltersOpen((open) => !open)}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="16" height="16" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                  <line x1="4" y1="6" x2="20" y2="6" />
+                  <line x1="7" y1="12" x2="17" y2="12" />
+                  <line x1="10" y1="18" x2="14" y2="18" />
                 </svg>
-                Filters{activeFilters > 0 && <span className="filter-count">{activeFilters}</span>}
+                <span className="filter-toggle-label">Filters</span>
+                {panelFilters > 0 && <span className="filter-count">{panelFilters}</span>}
               </button>
             </div>
+
+            <div className="chip-row" role="group" aria-label="Date range">
+              {presets.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className="filter-chip"
+                  aria-pressed={activePreset?.id === preset.id}
+                  onClick={() => setParams({ from: preset.from, to: preset.to })}
+                >
+                  {preset.label}
+                </button>
+              ))}
+              {customDates && (
+                <button type="button" className="filter-chip" aria-pressed="true" onClick={() => setFiltersOpen(true)}>
+                  {from ? relativeDay(from, today) : '…'} – {to ? relativeDay(to, today) : '…'}
+                </button>
+              )}
+            </div>
+
+            {categoryChips.length > 1 && (
+              <div className="chip-row" role="group" aria-label="Category">
+                <button
+                  type="button"
+                  className="filter-chip"
+                  aria-pressed={!category}
+                  onClick={() => setParams({ category: '' })}
+                >
+                  All
+                </button>
+                {categoryChips.map((cat) => (
+                  <button
+                    key={cat.key}
+                    type="button"
+                    className="filter-chip"
+                    aria-pressed={category === cat.key}
+                    onClick={() => setParams({ category: category === cat.key ? '' : cat.key })}
+                  >
+                    <span aria-hidden="true">{cat.emoji}</span> {cat.label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {filtersOpen && (
               <div id={`${ids}-filters`} className="glass-card filter-panel">
                 <div className="form-group">
-                  <label htmlFor={`${ids}-category`}>Category</label>
-                  <select id={`${ids}-category`} value={category} onChange={(e) => setParam('category', e.target.value)}>
-                    <option value="">All categories</option>
-                    {Object.values(CATEGORIES).map((cat) => (
-                      <option key={cat.key} value={cat.key}>{cat.emoji} {cat.label}</option>
+                  <label htmlFor={`${ids}-from`}>From</label>
+                  <input id={`${ids}-from`} type="date" value={from} max={to || undefined} onChange={(e) => setParams({ from: e.target.value })} />
+                </div>
+                <div className="form-group">
+                  <label htmlFor={`${ids}-to`}>To</label>
+                  <input id={`${ids}-to`} type="date" value={to} min={from || undefined} onChange={(e) => setParams({ to: e.target.value })} />
+                </div>
+                <div className="form-group">
+                  <label htmlFor={`${ids}-sort`}>Sort</label>
+                  <select id={`${ids}-sort`} value={sort} onChange={(e) => setParams({ sort: e.target.value === 'newest' ? '' : e.target.value })}>
+                    {Object.entries(SORTS).map(([value, { label }]) => (
+                      <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
                 </div>
                 {currencies.length > 1 && (
                   <div className="form-group">
                     <label htmlFor={`${ids}-currency`}>Currency</label>
-                    <select id={`${ids}-currency`} value={currency} onChange={(e) => setParam('currency', e.target.value)}>
+                    <select id={`${ids}-currency`} value={currency} onChange={(e) => setParams({ currency: e.target.value })}>
                       <option value="">All currencies</option>
                       {currencies.map((code) => (
                         <option key={code} value={code}>{CURRENCIES[code]?.symbol} {code}</option>
@@ -257,36 +278,24 @@ function ExpensesPage() {
                     </select>
                   </div>
                 )}
-                <div className="form-group">
-                  <label htmlFor={`${ids}-from`}>From</label>
-                  <input id={`${ids}-from`} type="date" value={from} max={to || undefined} onChange={(e) => setParam('from', e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label htmlFor={`${ids}-to`}>To</label>
-                  <input id={`${ids}-to`} type="date" value={to} min={from || undefined} onChange={(e) => setParam('to', e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label htmlFor={`${ids}-sort`}>Sort</label>
-                  <select id={`${ids}-sort`} value={sort} onChange={(e) => setParam('sort', e.target.value === 'newest' ? '' : e.target.value)}>
-                    {Object.entries(SORTS).map(([value, { label }]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                </div>
               </div>
             )}
 
             <p className="filter-summary" role="status">
-              {isFiltered ? `${filtered.length} of ${expenses.length}` : `${expenses.length} expenses`}
-              {filtered.length > 0 && <> · {formatTotals(sumByCurrency(filtered), preferredCurrency)}</>}
-              {isFiltered && (
-                <>
-                  {' · '}
+              <span>
+                {isFiltered ? `${filtered.length} of ${expenses.length}` : `${expenses.length} expenses`}
+                {filtered.length > 0 && <> · <strong>{formatTotals(sumByCurrency(filtered), preferredCurrency)}</strong></>}
+              </span>
+              <span className="filter-summary-actions">
+                {filtered.length > 0 && (
+                  <button type="button" className="btn-link" onClick={exportFiltered}>Export CSV</button>
+                )}
+                {isFiltered && (
                   <button type="button" className="btn-link" onClick={clearAll}>Clear filters</button>
-                </>
-              )}
+                )}
+              </span>
             </p>
-          </>
+          </div>
         )}
 
         {loading ? (
@@ -303,47 +312,59 @@ function ExpensesPage() {
             ))}
           </div>
         ) : expenses.length === 0 ? (
-          <div className="empty-state">
+          <div className="glass-card empty-state">
             <div className="empty-state-icon">📝</div>
-            <div className="empty-state-text">No expenses yet. Add one from the Home tab!</div>
+            <p className="empty-state-text">Nothing here yet. Everything you log shows up in this list.</p>
+            <Link to="/" className="btn-accent">Add an expense</Link>
           </div>
         ) : filtered.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">🔍</div>
-            <div className="empty-state-text">No expenses match these filters.</div>
+            <p className="empty-state-text">
+              {q ? `Nothing matches “${q}”` : 'No expenses match these filters'}
+              {category ? ` in ${getCategoryLabel(category)}` : ''}.
+            </p>
             <button type="button" className="btn-secondary" onClick={clearAll}>Clear filters</button>
+          </div>
+        ) : byDate ? (
+          <div className="day-groups">
+            {groupByDay(visible).map((group, g) => (
+              <section key={group.date} className="day-group" aria-labelledby={`${ids}-day-${g}`}>
+                <h2 id={`${ids}-day-${g}`} className="day-header">
+                  <span>{relativeDay(group.date, today)}</span>
+                  <span className="day-total">
+                    {formatTotals(sumByCurrency(group.items), preferredCurrency)}
+                  </span>
+                </h2>
+                <div className="expense-list">
+                  {group.items.map((expense, i) => renderCard(expense, g + i, false))}
+                </div>
+              </section>
+            ))}
           </div>
         ) : (
           <div className="expense-list">
-            {filtered.map((expense, index) => (
-              <ExpenseCard
-                key={expense.id}
-                expense={expense}
-                style={{ animationDelay: `${Math.min(index, 12) * 50}ms` }}
-                onEdit={setEditing}
-                onDelete={(id) => setDeleting(expenses.find((e) => e.id === id) ?? null)}
-              />
-            ))}
+            {visible.map((expense, i) => renderCard(expense, i, true))}
           </div>
         )}
-      </section>
 
-      {deleting && (
-        <DeleteExpenseModal
-          expense={deleting}
-          onClose={() => setDeleting(null)}
-          onConfirm={() => {
-            removeExpense(deleting.id).catch((err) => logError('Failed to delete expense', err));
-            setDeleting(null);
-          }}
-        />
-      )}
+        {remaining > 0 && (
+          <button
+            type="button"
+            className="btn-secondary show-more"
+            onClick={() => setPaging({ key: filterKey, limit: limit + PAGE_SIZE })}
+          >
+            Show more · {remaining} left
+          </button>
+        )}
+      </section>
 
       {editing && (
         <EditExpenseModal
           expense={editing}
+          onSave={(updates) => saveWithUndo(editing, updates)}
+          onDelete={deleteWithUndo}
           onClose={() => setEditing(null)}
-          onSave={(updates) => editExpense(editing.id, updates)}
         />
       )}
     </div>

@@ -59,7 +59,8 @@ export function todayString(now = new Date()) {
   return toDateString(now);
 }
 
-function addDays(dateStr, n) {
+/** Shifts a YYYY-MM-DD string by `n` days (negative goes back). */
+export function addDays(dateStr, n) {
   const d = parseDateString(dateStr);
   d.setDate(d.getDate() + n);
   return toDateString(d);
@@ -92,6 +93,29 @@ export function formatDay(dateStr) {
     day: 'numeric',
     month: 'short',
   });
+}
+
+/**
+ * How a day reads in a list: "Today", "Yesterday", "Mon, Sep 21" — with the
+ * year added only when it isn't this year.
+ */
+export function relativeDay(dateStr, today = todayString()) {
+  if (dateStr === today) return 'Today';
+  if (dateStr === addDays(today, -1)) return 'Yesterday';
+  const d = parseDateString(dateStr);
+  const sameYear = dateStr.slice(0, 4) === today.slice(0, 4);
+  return d.toLocaleDateString('en', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  });
+}
+
+export function greetingFor(hour) {
+  if (hour >= 5 && hour < 12) return 'Good morning';
+  if (hour >= 12 && hour < 17) return 'Good afternoon';
+  return 'Good evening';
 }
 
 // ─── Periods ──────────────────────────────────────────────────────────────────
@@ -418,6 +442,58 @@ export function topItems(expenses, limit = 8) {
     .map((r) => ({ ...r, total: round2(r.total) }))
     .sort((a, b) => b.total - a.total || b.count - a.count)
     .slice(0, limit);
+}
+
+/**
+ * Things bought again and again lately, with the price usually paid — the
+ * Home page offers them as one-tap shortcuts.
+ *
+ * Looks at the last `days` days and keeps items logged at least twice. The
+ * amount is the most common price (ties go to the most recent), but only if
+ * that price has actually repeated — lunch at a different price every day
+ * gets no amount, so the user types it rather than accepting a guess. The
+ * label is the item as last typed, so re-parsing it gives the same result.
+ *
+ * @returns {Array<{ key: string, label: string, amount: number|null, currency: string, category: string, count: number }>}
+ */
+export function frequentItems(expenses, today = todayString(), { days = 60, limit = 6 } = {}) {
+  const since = addDays(today, -(days - 1));
+  const groups = new Map();
+
+  for (const e of expenses) {
+    if (!e.date || e.date < since || e.date > today || !e.amount) continue;
+    const key = itemKey(e);
+    if (key.startsWith('(')) continue;
+    const g = groups.get(key) || { key, count: 0, latest: null, amounts: new Map() };
+    g.count += 1;
+    const newer = !g.latest || e.date > g.latest.date || (e.date === g.latest.date && (e.createdAt || 0) > (g.latest.createdAt || 0));
+    if (newer) g.latest = e;
+    const amountKey = `${e.currency || 'INR'}|${e.amount}`;
+    const a = g.amounts.get(amountKey) || { count: 0, last: '' };
+    a.count += 1;
+    if (e.date > a.last) a.last = e.date;
+    g.amounts.set(amountKey, a);
+    groups.set(key, g);
+  }
+
+  return [...groups.values()]
+    .filter((g) => g.count >= 2)
+    .sort((a, b) => b.count - a.count || b.latest.date.localeCompare(a.latest.date))
+    .slice(0, limit)
+    .map((g) => {
+      const [amountKey, top] = [...g.amounts].sort(
+        ([, x], [, y]) => y.count - x.count || y.last.localeCompare(x.last),
+      )[0];
+      const [currency, amount] = amountKey.split('|');
+      return {
+        key: g.key,
+        label: String(g.latest.item).trim(),
+        amount: top.count >= 2 ? Number(amount) : null,
+        currency,
+        category: g.latest.category || 'other',
+        count: g.count,
+      };
+    });
 }
 
 // ─── People ───────────────────────────────────────────────────────────────────

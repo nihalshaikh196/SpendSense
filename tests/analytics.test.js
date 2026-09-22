@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  addDays,
+  frequentItems,
+  greetingFor,
+  relativeDay,
   comparisonLabel,
   comparisonWindow,
   cumulative,
@@ -242,5 +246,57 @@ describe('day stats', () => {
     assert.equal(stats.noSpendDays, 3);
     assert.equal(stats.weekendAverage, 300);
     assert.equal(stats.weekdayAverage, 20);
+  });
+});
+
+describe('home helpers', () => {
+  test('relative day names', () => {
+    assert.equal(relativeDay('2026-09-23', '2026-09-23'), 'Today');
+    assert.equal(relativeDay('2026-09-22', '2026-09-23'), 'Yesterday');
+    assert.equal(relativeDay('2026-09-14', '2026-09-23'), 'Mon, Sep 14');
+    assert.equal(relativeDay('2025-12-31', '2026-09-23'), 'Wed, Dec 31, 2025');
+    assert.equal(relativeDay('2026-03-01', '2026-03-02'), 'Yesterday');
+  });
+
+  test('addDays crosses month and year boundaries', () => {
+    assert.equal(addDays('2026-03-01', -1), '2026-02-28');
+    assert.equal(addDays('2025-12-31', 1), '2026-01-01');
+  });
+
+  test('greeting by hour', () => {
+    assert.equal(greetingFor(8), 'Good morning');
+    assert.equal(greetingFor(13), 'Good afternoon');
+    assert.equal(greetingFor(20), 'Good evening');
+    assert.equal(greetingFor(2), 'Good evening');
+  });
+
+  test('frequent items: repeats in the window, most common price, latest wording', () => {
+    const list = [
+      exp('2026-09-20', 120, { item: 'coffee', createdAt: 1 }),
+      exp('2026-09-21', 140, { item: 'coffee', createdAt: 2 }),
+      exp('2026-09-22', 120, { item: 'Coffee', createdAt: 3 }),
+      exp('2026-09-18', 310, { item: 'lunch' }),
+      exp('2026-09-19', 280, { item: 'lunch' }),
+      exp('2026-09-10', 250, { item: 'uber', category: 'transport' }),
+      exp('2026-09-12', 250, { item: 'uber', category: 'transport' }),
+      exp('2026-09-15', 900, { item: 'shoes', category: 'shopping' }),
+      exp('2026-05-01', 649, { item: 'netflix' }),
+      exp('2026-06-01', 649, { item: 'netflix' }),
+    ];
+    const items = frequentItems(list, '2026-09-23');
+    assert.deepEqual(
+      items.map((i) => [i.label, i.amount, i.count]),
+      // Equal counts: the more recently bought item comes first
+      [['Coffee', 120, 3], ['lunch', null, 2], ['uber', 250, 2]],
+    );
+    assert.equal(items[2].category, 'transport');
+  });
+
+  test('frequent items keep their currency', () => {
+    const list = [
+      exp('2026-09-20', 5, { item: 'bagel', currency: 'USD' }),
+      exp('2026-09-21', 5, { item: 'bagel', currency: 'USD' }),
+    ];
+    assert.equal(frequentItems(list, '2026-09-23')[0].currency, 'USD');
   });
 });

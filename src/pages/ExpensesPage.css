@@ -1,20 +1,11 @@
-.expenses-count {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  background: var(--bg-glass);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-full);
-  padding: var(--space-2xs) var(--space-sm);
+.recent-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
 }
 
-/* Two columns of cards once there is room for them side by side. */
-@media (min-width: 1024px) {
-  .expenses-page .expense-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-    gap: var(--space-md);
-  }
+.recent-section .section-header {
+  margin-bottom: 0;
 }
 
 .page-title {
@@ -25,12 +16,27 @@
   letter-spacing: 0.05em;
 }
 
-/* ─── Search & filters ────────────────────────────────────────────────────── */
+.expenses-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  padding: var(--space-2xs) var(--space-sm);
+}
+
+/* ─── Search, chips & filters ─────────────────────────────────────────────── */
+
+.expenses-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
 
 .expenses-toolbar {
   display: flex;
   gap: var(--space-sm);
-  margin-bottom: var(--space-sm);
 }
 
 .search-field {
@@ -52,7 +58,7 @@
 
 .search-field input {
   padding: 10px 12px 10px 38px;
-  font-size: 0.9375rem;
+  font-size: 1rem;
 }
 
 .filter-toggle {
@@ -77,26 +83,66 @@
   font-weight: 700;
 }
 
+/* A row of toggle chips; scrolls sideways on a phone rather than wrapping */
+.chip-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 calc(var(--space-md) * -1);
+  padding: 2px var(--space-md);
+}
+
+.chip-row::-webkit-scrollbar {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .chip-row {
+    flex-wrap: wrap;
+    overflow: visible;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+.filter-chip {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.filter-chip:hover {
+  color: var(--text-primary);
+  background: var(--bg-glass);
+}
+
+.filter-chip[aria-pressed="true"] {
+  color: var(--text-primary);
+  background: rgba(124, 92, 252, 0.2);
+  border-color: var(--border-accent);
+}
+
 .filter-panel {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-md);
   padding: var(--space-md);
-  margin-bottom: var(--space-sm);
   animation: fadeInDown 200ms ease;
-}
-
-.filter-panel .form-group:first-child {
-  grid-column: 1 / -1;
 }
 
 @media (min-width: 768px) {
   .filter-panel {
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  }
-
-  .filter-panel .form-group:first-child {
-    grid-column: auto;
   }
 }
 
@@ -106,7 +152,74 @@
 }
 
 .filter-summary {
-  margin-bottom: var(--space-md);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-md);
   font-size: 0.8125rem;
   color: var(--text-secondary);
+}
+
+.filter-summary strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.filter-summary-actions {
+  display: flex;
+  gap: var(--space-md);
+}
+
+/* ─── Day groups ──────────────────────────────────────────────────────────── */
+
+.day-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.day-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* Stays pinned while scrolling through a long day */
+.day-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin: 0 calc(var(--space-xs) * -1);
+  padding: var(--space-sm) var(--space-xs);
+  background: rgba(10, 11, 20, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.day-total {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.show-more {
+  align-self: center;
+  margin-top: var(--space-sm);
+}
+
+/* Two columns of cards once there is room for them side by side. */
+@media (min-width: 1024px) {
+  .expenses-page .expense-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: var(--space-sm) var(--space-md);
+  }
 }

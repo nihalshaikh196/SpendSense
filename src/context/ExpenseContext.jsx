@@ -83,6 +83,13 @@ export function ExpenseProvider({ children }) {
     syncInBackground(() => syncDeleteExpense(user, id));
   }, [user, syncInBackground]);
 
+  // Undo for a delete: puts the exact record back — same id and createdAt —
+  // as an unsynced write. If the remote delete is still pending, the next
+  // sync replays it first and then re-uploads this, so the record survives.
+  const restoreExpense = useCallback(async (expense) => {
+    return addNewExpense({ ...expense, synced: false });
+  }, [addNewExpense]);
+
   const editExpense = useCallback(async (id, updates) => {
     const updated = await updateExpense(id, { ...updates, synced: false });
     setExpenses((prev) => prev.map((e) => (e.id === id ? updated : e)));
@@ -100,7 +107,7 @@ export function ExpenseProvider({ children }) {
   }, [refreshExpenses]);
 
   return (
-    <ExpenseContext.Provider value={{ expenses, loading, isSyncing, syncError, addNewExpense, removeExpense, editExpense, refreshExpenses, retrySync: fullSync }}>
+    <ExpenseContext.Provider value={{ expenses, loading, isSyncing, syncError, addNewExpense, removeExpense, restoreExpense, editExpense, refreshExpenses, retrySync: fullSync }}>
       {children}
     </ExpenseContext.Provider>
   );
