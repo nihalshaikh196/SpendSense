@@ -12,6 +12,11 @@ export function AuthProvider({ children }) {
     // Listen for auth state changes
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
+        // A UX convenience, not a security control: signs you out after 30
+        // days so a shared device doesn't stay signed in forever. The value
+        // lives in localStorage, so anyone with the device can reset it.
+        // Access is actually enforced by Firebase's own ID tokens and the
+        // Firestore rules.
         const loginTimestamp = localStorage.getItem('loginTimestamp');
         const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
         

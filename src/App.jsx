@@ -1,4 +1,6 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { Suspense } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import './App.css';
 
 const NAV_ITEMS = [
@@ -55,6 +57,8 @@ const NAV_ITEMS = [
 ];
 
 function App() {
+  const { pathname } = useLocation();
+
   return (
     <div className="app-shell">
       <nav className="app-nav" id="main-nav" aria-label="Main navigation">
@@ -78,7 +82,18 @@ function App() {
       </nav>
 
       <main className="app-main">
-        <Outlet />
+        {/* Keyed by route so leaving a crashed page clears the error. */}
+        <ErrorBoundary key={pathname}>
+          <Suspense
+            fallback={
+              <div className="page-container">
+                <div className="empty-state">Loading…</div>
+              </div>
+            }
+          >
+            <Outlet />
+          </Suspense>
+        </ErrorBoundary>
       </main>
     </div>
   );

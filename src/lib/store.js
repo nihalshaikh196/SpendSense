@@ -1,8 +1,8 @@
 /**
  * @module store
  * @description IndexedDB storage layer for expense records. Provides CRUD
- * operations, filtering, and aggregation stats using native IndexedDB API
- * wrapped in Promises.
+ * operations and filtering using native IndexedDB API wrapped in Promises.
+ * Aggregation lives in `analytics.js` and runs on the in-memory list.
  */
 
 import { v4 as uuidv4 } from 'uuid';
@@ -404,74 +404,4 @@ export async function clearTombstones(ids) {
     store.delete(id);
   }
   await promisifyTransaction(tx);
-}
-
-// ─── Stats / Aggregation ─────────────────────────────────────────────────────
-
-/**
- * Computes aggregated statistics for a given time period.
- *
- * @param {'today'|'week'|'month'} period - The period to aggregate over
- * @returns {Promise<{
- *   total: number,
- *   count: number,
- *   byCategory: Record<string, number>
- * }>} Aggregated stats
- *
- * @example
- * const stats = await getStats('week');
- * // → { total: 2500, count: 8, byCategory: { food: 1200, transport: 500, ... } }
- */
-export async function getStats(period = 'month') {
-  const today = new Date();
-  let startDate;
-
-  switch (period) {
-    case 'today':
-      startDate = toDateString(today);
-      break;
-
-    case 'week': {
-      const weekStart = new Date(today);
-      const dayOfWeek = weekStart.getDay();
-      // Start from Monday (adjust for Sunday = 0)
-      const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-      weekStart.setDate(weekStart.getDate() - diff);
-      startDate = toDateString(weekStart);
-      break;
-    }
-
-    case 'month':
-    default: {
-      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      startDate = toDateString(monthStart);
-      break;
-    }
-  }
-
-  const endDate = toDateString(today);
-
-  const expenses = await getExpenses({ startDate, endDate });
-
-  const stats = {
-    total: 0,
-    count: expenses.length,
-    byCategory: {},
-  };
-
-  for (const expense of expenses) {
-    const amount = expense.amount || 0;
-    stats.total += amount;
-
-    const cat = expense.category || 'other';
-    stats.byCategory[cat] = (stats.byCategory[cat] || 0) + amount;
-  }
-
-  // Round to 2 decimal places to avoid floating-point drift
-  stats.total = Math.round(stats.total * 100) / 100;
-  for (const cat of Object.keys(stats.byCategory)) {
-    stats.byCategory[cat] = Math.round(stats.byCategory[cat] * 100) / 100;
-  }
-
-  return stats;
 }

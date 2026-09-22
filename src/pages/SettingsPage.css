@@ -114,3 +114,13 @@
   color: var(--text-muted);
   margin-top: var(--space-lg);
 }
+
+.settings-status {
+  margin-top: var(--space-md);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.settings-status-error {
+  color: var(--color-danger);
+}

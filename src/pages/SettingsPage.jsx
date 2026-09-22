@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useExpenses } from '../context/ExpenseContext.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { CURRENCIES } from '../lib/currency.js';
 import { getExpenses, clearAllExpenses } from '../lib/store.js';
+import { downloadCsv, expensesToCsv } from '../lib/csv.js';
+import { todayString } from '../lib/analytics.js';
+import { logError } from '../lib/log.js';
+import Modal from '../components/Modal.jsx';
 import './SettingsPage.css';
 
 function SettingsPage() {
@@ -16,66 +20,35 @@ function SettingsPage() {
     setUserName(localName.trim());
   };
 
+  const [dataStatus, setDataStatus] = useState(null);
+  const [confirmingClear, setConfirmingClear] = useState(false);
+  const cancelClearRef = useRef(null);
+
   const handleExportCSV = async () => {
     try {
       const allExpenses = await getExpenses();
       if (allExpenses.length === 0) {
-        alert("No expenses to export.");
+        setDataStatus({ tone: 'info', text: 'No expenses to export yet.' });
         return;
       }
-
-      // Headers
-      const headers = ['Date', 'Item', 'Amount', 'Currency', 'Category', 'People', 'Raw Input'];
-
-      // Spreadsheets execute cells beginning with = + - @, and item/raw are
-      // free text, so prefix a quote to force them to stay literal.
-      const csvCell = (value) => {
-        const str = String(value ?? '');
-        const safe = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
-        return `"${safe.replace(/"/g, '""')}"`;
-      };
-
-      const rows = allExpenses.map(exp => [
-        csvCell(exp.date),
-        csvCell(exp.item),
-        exp.amount,
-        csvCell(exp.currency),
-        csvCell(exp.category),
-        csvCell((exp.people || []).join(', ')),
-        csvCell(exp.raw)
-      ]);
-
-      const csvContent = [
-        headers.join(','),
-        ...rows.map(row => row.join(','))
-      ].join('\n');
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `spendsense_export_${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      downloadCsv(`spendsense_export_${todayString()}.csv`, expensesToCsv(allExpenses));
+      setDataStatus({ tone: 'info', text: `Exported ${allExpenses.length} expense${allExpenses.length === 1 ? '' : 's'}.` });
     } catch (err) {
-      console.error('Failed to export CSV', err);
-      alert('Failed to export CSV.');
+      logError('Failed to export CSV', err);
+      setDataStatus({ tone: 'error', text: 'Export failed. Try again.' });
     }
   };
 
   const handleClearData = async () => {
-    if (!window.confirm("Are you sure you want to delete ALL your expenses? This cannot be undone.")) {
-      return;
-    }
+    setConfirmingClear(false);
     try {
       const removed = await clearAllExpenses();
       await refreshExpenses();
       if (user) await retrySync();
-      alert(`Cleared ${removed} expense${removed === 1 ? '' : 's'}.`);
+      setDataStatus({ tone: 'info', text: `Cleared ${removed} expense${removed === 1 ? '' : 's'}.` });
     } catch (err) {
-      console.error('Failed to clear data', err);
-      alert('Failed to clear data.');
+      logError('Failed to clear data', err);
+      setDataStatus({ tone: 'error', text: 'Couldn’t clear data. Try again.' });
     }
   };
 
@@ -92,8 +65,8 @@ function SettingsPage() {
           {!user ? (
             <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '12px' }}>
               <p style={{ fontSize: '0.9rem', margin: 0, color: 'var(--text-secondary)', lineHeight: '1.4' }}>
-                <strong>You can use SpendSense completely offline.</strong><br/>
-                Login with Google only if you want to backup and sync your expenses across devices.
+                <strong>No account needed.</strong> Your expenses are saved on this device.<br/>
+                Sign in with Google only if you want to back up and sync them across devices.
               </p>
               <button className="btn-google" onClick={loginWithGoogle}>
                 <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -177,7 +150,7 @@ function SettingsPage() {
               Export as CSV
             </button>
             
-            <button className="btn-danger" onClick={handleClearData}>
+            <button className="btn-danger" onClick={() => setConfirmingClear(true)}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="18" height="18" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="3 6 5 6 21 6" />
                 <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
@@ -187,14 +160,44 @@ function SettingsPage() {
               Clear All Data
             </button>
           </div>
+          {dataStatus && (
+            <p className={`settings-status ${dataStatus.tone === 'error' ? 'settings-status-error' : ''}`} role="status">
+              {dataStatus.text}
+            </p>
+          )}
         </div>
       </section>
+
+      {confirmingClear && (
+        <Modal
+          title="Delete all expenses?"
+          onClose={() => setConfirmingClear(false)}
+          initialFocusRef={cancelClearRef}
+          className="modal-center"
+          actions={
+            <>
+              <button ref={cancelClearRef} type="button" className="btn-secondary" onClick={() => setConfirmingClear(false)}>
+                Cancel
+              </button>
+              <button type="button" className="btn-accent btn-confirm-danger" onClick={handleClearData}>
+                Delete everything
+              </button>
+            </>
+          }
+        >
+          <p>
+            Every expense on this device will be deleted
+            {user ? ', and from your synced backup too' : ''}. This can’t be undone — export a CSV first if you
+            might want them later.
+          </p>
+        </Modal>
+      )}
 
       {/* ─── About ─── */}
       <section className="settings-section" style={{ animationDelay: '300ms' }}>
         <div className="glass-card settings-card about-card">
           <div className="about-title">SpendSense</div>
-          <div className="about-version">v1.0.0</div>
+          <div className="about-version">v1.0.1</div>
           <div className="about-tagline">Track expenses with natural language</div>
           <div className="about-credits">Built with React + Vite</div>
         </div>

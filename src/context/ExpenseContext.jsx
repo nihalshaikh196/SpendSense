@@ -9,6 +9,7 @@ import { createContext, useContext, useState, useCallback, useEffect } from 'rea
 import { addExpense, getExpenses, deleteExpense, updateExpense, initDB } from '../lib/store.js';
 import { useAuth } from './AuthContext';
 import { pullFromFirestore, pushUnsyncedToFirestore, syncSingleExpense, syncDeleteExpense } from '../services/sync';
+import { logError } from '../lib/log.js';
 
 const ExpenseContext = createContext(null);
 
@@ -26,7 +27,7 @@ export function ExpenseProvider({ children }) {
       const data = await getExpenses();
       setExpenses(data);
     } catch (err) {
-      console.error('Failed to load expenses:', err);
+      logError('Failed to load expenses:', err);
     } finally {
       setLoading(false);
     }
@@ -43,7 +44,7 @@ export function ExpenseProvider({ children }) {
       await refreshExpenses();
       setSyncError(null);
     } catch (e) {
-      console.error('Sync error:', e);
+      logError('Sync error:', e);
       setSyncError(e.message || 'Sync failed');
     } finally {
       setIsSyncing(false);
@@ -63,7 +64,7 @@ export function ExpenseProvider({ children }) {
     run()
       .then(() => setSyncError(null))
       .catch((err) => {
-        console.error('Sync failed:', err);
+        logError('Sync failed:', err);
         setSyncError(err.message || 'Sync failed');
       })
       .finally(() => setIsSyncing(false));
@@ -93,7 +94,7 @@ export function ExpenseProvider({ children }) {
     initDB()
       .then(() => refreshExpenses())
       .catch((err) => {
-        console.error('Failed to initialize DB:', err);
+        logError('Failed to initialize DB:', err);
         setLoading(false);
       });
   }, [refreshExpenses]);

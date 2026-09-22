@@ -13,6 +13,31 @@ function expensesRef(user) {
   return collection(db, 'users', user.uid, 'expenses');
 }
 
+/** Firestore rejects a batch of more than 500 writes. */
+const BATCH_LIMIT = 500;
+
+function chunks(list, size = BATCH_LIMIT) {
+  const out = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
+
+/** Every field an expense document may hold. Must match firestore.rules. */
+const REMOTE_FIELDS = ['id', 'amount', 'currency', 'date', 'item', 'people', 'category', 'raw', 'createdAt'];
+
+/**
+ * The Firestore shape of an expense: known fields only. The rules reject any
+ * document with fields outside this list, so a stray local property (from an
+ * older version, say) must never ride along or the whole write fails.
+ */
+function toRemote(expense) {
+  const doc = { synced: true };
+  for (const field of REMOTE_FIELDS) {
+    if (expense[field] !== undefined) doc[field] = expense[field];
+  }
+  return doc;
+}
+
 /**
  * Replays deletions that happened while offline, then pushes every unsynced
  * local expense. Runs before a pull so the remote is accurate when we
@@ -23,27 +48,29 @@ export async function pushUnsyncedToFirestore(user) {
 
   const userExpensesRef = expensesRef(user);
 
+  // Each chunk is committed and marked done before the next, so a failure
+  // part-way leaves only the unfinished chunks to retry on the next sync.
   const tombstones = await getTombstones();
-  if (tombstones.length > 0) {
+  for (const chunk of chunks(tombstones)) {
     const batch = writeBatch(db);
-    for (const { id } of tombstones) {
+    for (const { id } of chunk) {
       batch.delete(doc(userExpensesRef, id));
     }
     await batch.commit();
-    await clearTombstones(tombstones.map((t) => t.id));
+    await clearTombstones(chunk.map((t) => t.id));
   }
 
   const unsynced = (await getExpenses()).filter((e) => !e.synced);
-  if (unsynced.length === 0) return;
+  for (const chunk of chunks(unsynced)) {
+    const batch = writeBatch(db);
+    for (const exp of chunk) {
+      batch.set(doc(userExpensesRef, exp.id), toRemote(exp));
+    }
+    await batch.commit();
 
-  const batch = writeBatch(db);
-  for (const exp of unsynced) {
-    batch.set(doc(userExpensesRef, exp.id), { ...exp, synced: true });
-  }
-  await batch.commit();
-
-  for (const exp of unsynced) {
-    await updateExpense(exp.id, { synced: true });
+    for (const exp of chunk) {
+      await updateExpense(exp.id, { synced: true });
+    }
   }
 }
 
@@ -90,10 +117,7 @@ export async function pullFromFirestore(user) {
 export async function syncSingleExpense(user, expense) {
   if (!user) return;
 
-  await setDoc(doc(db, 'users', user.uid, 'expenses', expense.id), {
-    ...expense,
-    synced: true,
-  });
+  await setDoc(doc(db, 'users', user.uid, 'expenses', expense.id), toRemote(expense));
   await updateExpense(expense.id, { synced: true });
 }
 

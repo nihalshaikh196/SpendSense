@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { logError } from "../lib/log.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA9D0Gt1B0p5z_Nuj8gIaMRAxakeO5QDMI",
@@ -24,7 +25,7 @@ export const loginWithGoogle = async () => {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error) {
-    console.error("Error signing in with Google", error);
+    logError("Error signing in with Google", error);
     throw error;
   }
 };
@@ -33,7 +34,7 @@ export const logout = async () => {
   try {
     await signOut(auth);
   } catch (error) {
-    console.error("Error signing out", error);
+    logError("Error signing out", error);
     throw error;
   }
 };
