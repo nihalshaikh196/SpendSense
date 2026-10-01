@@ -167,3 +167,38 @@ export function getCurrencySymbol(code) {
   const upper = code.toUpperCase();
   return CURRENCIES[upper]?.symbol ?? upper;
 }
+
+/**
+ * Formats per-currency totals without ever adding them together. The
+ * preferred currency comes first, then the rest by code.
+ *
+ * @param {Record<string, number>} totals - e.g. { INR: 1200, USD: 50 }
+ * @param {string} preferred             - Currency to lead with
+ * @returns {string} e.g. '₹1,200 + $50', or '₹0' when there's nothing
+ *
+ * @example
+ * formatTotals({ INR: 1200, USD: 50 }, 'INR') // → '₹1,200 + $50'
+ * formatTotals({}, 'INR')                     // → '₹0'
+ */
+export function formatTotals(totals, preferred = 'INR') {
+  const codes = Object.keys(totals).filter((code) => totals[code] !== 0);
+  if (codes.length === 0) return formatAmount(0, preferred);
+  codes.sort((a, b) => (a === preferred ? -1 : b === preferred ? 1 : a.localeCompare(b)));
+  return codes.map((code) => formatAmount(totals[code], code)).join(' + ');
+}
+
+/**
+ * Compact form for chart axes: '₹12K', '$1.2M'. Uses international
+ * K/M suffixes rather than lakh/crore so axis ticks stay short.
+ *
+ * @param {number} amount
+ * @param {string} currencyCode
+ * @returns {string} e.g. '₹12K', '$1.2M'
+ */
+export function formatCompact(amount, currencyCode = 'INR') {
+  const currency = CURRENCIES[(currencyCode || 'INR').toUpperCase()];
+  const num = Number(amount);
+  if (!Number.isFinite(num)) return `${currency?.symbol ?? ''}0`;
+  const formatted = num.toLocaleString('en', { notation: 'compact', maximumFractionDigits: 1 });
+  return `${currency?.symbol ?? `${currencyCode} `}${formatted}`;
+}

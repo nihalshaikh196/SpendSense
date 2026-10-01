@@ -42,3 +42,12 @@ secrets.json
 firebase-debug.log
 firebase-debug.*.log
 firebase-export-metadata.json
+
+# Local-only project files (deploy config and notes). Deploy commands read
+# them from this machine.
+firebase.json
+.firebaserc
+firestore.rules
+firestore.indexes.json
+tests/rules/
+UPGRADES.md

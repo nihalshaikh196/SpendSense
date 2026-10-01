@@ -30,6 +30,10 @@ export const CATEGORIES = Object.freeze({
       'pub', 'zomato', 'swiggy', 'milk', 'eggs', 'egg', 'bread', 'paneer',
       'chicken', 'mutton', 'fish', 'cake', 'chocolate', 'dessert', 'desserts',
       'food', 'meal', 'brunch', 'cafe', 'canteen', 'mess',
+      'sandwich', 'momos', 'idli', 'vada', 'poha', 'upma', 'paratha', 'roti',
+      'curry', 'dal', 'sabzi', 'fruits', 'vegetables', 'veggies', 'buffet',
+      'dhaba', 'starbucks', 'dominos', 'mcdonalds', 'kfc', 'biscuits',
+      'namkeen', 'sweets', 'lassi', 'shake', 'smoothie', 'soda', 'water bottle',
     ],
   },
   transport: {
@@ -39,7 +43,9 @@ export const CATEGORIES = Object.freeze({
     keywords: [
       'uber', 'ola', 'auto', 'rickshaw', 'petrol', 'diesel', 'bus', 'train',
       'metro', 'parking', 'toll', 'cab', 'taxi', 'flight', 'airfare',
-      'ticket', 'rapido', 'fuel', 'transport', 'travel', 'commute',
+      'ticket', 'tickets', 'rapido', 'fuel', 'transport', 'travel', 'commute',
+      'bike', 'scooter', 'servicing', 'tyre', 'tyres', 'puncture', 'challan',
+      'fastag', 'irctc', 'indigo', 'vistara', 'airport', 'railway',
     ],
   },
   shopping: {
@@ -47,10 +53,18 @@ export const CATEGORIES = Object.freeze({
     label: 'Shopping',
     emoji: '🛒',
     keywords: [
-      'clothes', 'shoes', 'amazon', 'flipkart', 'mall', 'groceries',
-      'grocery', 'myntra', 'shirt', 'jeans', 'dress', 'watch', 'bag',
-      'electronics', 'phone', 'laptop', 'headphones', 'charger',
-      'accessories', 'shopping', 'shop',
+      'clothes', 'shoe', 'shoes', 'amazon', 'flipkart', 'mall', 'groceries',
+      'grocery', 'myntra', 'shirt', 'tshirt', 't-shirt', 'jeans', 'dress',
+      'jacket', 'sneakers', 'sandals', 'watch', 'bag', 'electronics', 'phone',
+      'laptop', 'headphones', 'charger', 'accessories', 'shopping', 'shop',
+      // Furniture and household goods
+      'table', 'chair', 'sofa', 'couch', 'bed', 'mattress', 'furniture',
+      'desk', 'wardrobe', 'cupboard', 'shelf', 'curtains', 'lamp', 'mirror',
+      'cushion', 'carpet', 'rug', 'bedsheet', 'pillow', 'utensils',
+      // Appliances
+      'fridge', 'refrigerator', 'washing machine', 'microwave', 'television',
+      'oven', 'cooler', 'geyser', 'vacuum', 'appliance',
+      'gift', 'gifts',
     ],
   },
   entertainment: {
@@ -58,9 +72,11 @@ export const CATEGORIES = Object.freeze({
     label: 'Entertainment',
     emoji: '🎬',
     keywords: [
-      'movie', 'movies', 'netflix', 'tickets', 'games', 'game', 'concert',
+      'movie', 'movies', 'netflix', 'games', 'game', 'concert',
       'popcorn', 'spotify', 'hotstar', 'prime', 'youtube', 'subscription',
-      'book', 'books', 'magazine', 'gaming', 'entertainment',
+      'magazine', 'gaming', 'entertainment',
+      'novel', 'comics', 'theatre', 'theater', 'bowling', 'arcade',
+      'amusement', 'party', 'picnic', 'ott', 'show',
     ],
   },
   health: {
@@ -71,6 +87,8 @@ export const CATEGORIES = Object.freeze({
       'medicine', 'medicines', 'doctor', 'pharmacy', 'gym', 'hospital',
       'dentist', 'checkup', 'check-up', 'test', 'lab', 'vitamins',
       'vitamin', 'protein', 'health', 'medical',
+      'physio', 'therapy', 'yoga', 'clinic', 'surgery', 'dental',
+      'spectacles', 'lenses', 'bandage', 'syrup',
     ],
   },
   bills: {
@@ -81,6 +99,8 @@ export const CATEGORIES = Object.freeze({
       'recharge', 'electricity', 'wifi', 'rent', 'emi', 'insurance',
       'water', 'gas', 'maintenance', 'internet', 'broadband', 'postpaid',
       'prepaid', 'bill', 'bills', 'utility',
+      'dth', 'jio', 'airtel', 'vodafone', 'bsnl', 'tax', 'cylinder',
+      'society', 'loan',
     ],
   },
   education: {
@@ -88,9 +108,10 @@ export const CATEGORIES = Object.freeze({
     label: 'Education',
     emoji: '📚',
     keywords: [
-      'tuition', 'course', 'courses', 'books', 'exam', 'exams', 'fees',
-      'fee', 'coaching', 'class', 'classes', 'school', 'college',
-      'university', 'udemy', 'coursera', 'education', 'study',
+      'tuition', 'course', 'courses', 'book', 'books', 'textbook',
+      'textbooks', 'exam', 'exams', 'fees', 'fee', 'coaching', 'class',
+      'classes', 'school', 'college', 'university', 'udemy', 'coursera',
+      'education', 'study', 'stationery', 'notebook', 'pen', 'pencil',
     ],
   },
   personal: {
@@ -100,6 +121,8 @@ export const CATEGORIES = Object.freeze({
     keywords: [
       'haircut', 'salon', 'spa', 'grooming', 'laundry', 'dry clean',
       'dryclean', 'personal', 'parlour', 'parlor',
+      'barber', 'shave', 'manicure', 'pedicure', 'massage', 'cosmetics',
+      'makeup', 'skincare', 'shampoo', 'perfume', 'deodorant',
     ],
   },
   other: {
@@ -111,18 +134,44 @@ export const CATEGORIES = Object.freeze({
 });
 
 /**
+ * Phrases that must beat the single-word scan because their individual words
+ * point at different categories — "watch movie" would otherwise match 'watch'
+ * (shopping) and "coffee table" would match 'coffee' (food).
+ * @type {Array<{ phrase: string, category: string }>}
+ */
+const DISAMBIGUATING_PHRASES = [
+  { phrase: 'coffee table', category: 'shopping' },
+  { phrase: 'dining table', category: 'shopping' },
+  { phrase: 'watch movie', category: 'entertainment' },
+  { phrase: 'watched movie', category: 'entertainment' },
+  { phrase: 'movie ticket', category: 'entertainment' },
+  { phrase: 'movie tickets', category: 'entertainment' },
+  { phrase: 'concert ticket', category: 'entertainment' },
+  { phrase: 'concert tickets', category: 'entertainment' },
+  { phrase: 'gas cylinder', category: 'bills' },
+  { phrase: 'water bill', category: 'bills' },
+  { phrase: 'phone bill', category: 'bills' },
+  { phrase: 'school fees', category: 'education' },
+  { phrase: 'medical test', category: 'health' },
+  { phrase: 'blood test', category: 'health' },
+];
+
+/**
  * Pre-built reverse lookup: keyword → category key.
  * Multi-word keywords are stored as-is and matched via substring scan.
  * @type {Map<string, string>}
  */
 const singleWordMap = new Map();
-const multiWordEntries = [];
+const multiWordEntries = [...DISAMBIGUATING_PHRASES];
 
 for (const [catKey, def] of Object.entries(CATEGORIES)) {
   for (const kw of def.keywords) {
     if (kw.includes(' ')) {
       multiWordEntries.push({ phrase: kw, category: catKey });
-    } else {
+    } else if (!singleWordMap.has(kw)) {
+      // First declaration wins, so a keyword listed in two categories resolves
+      // by CATEGORIES order instead of by whichever happened to be assigned
+      // last. Keep the lists free of duplicates and this never has to arbitrate.
       singleWordMap.set(kw, catKey);
     }
   }
@@ -130,6 +179,23 @@ for (const [catKey, def] of Object.entries(CATEGORIES)) {
 
 // Sort multi-word entries by length (longest first) for greedy matching
 multiWordEntries.sort((a, b) => b.phrase.length - a.phrase.length);
+
+/**
+ * Strips a simple English plural so "tables" reaches the 'table' keyword.
+ * Only used as a fallback after an exact match fails, so shrinking a word
+ * that was already a keyword ("bus", "mess") can never do harm.
+ *
+ * @param {string} word - A lowercased, punctuation-stripped word
+ * @returns {string}
+ */
+function singularize(word) {
+  if (word.length > 4 && word.endsWith('ies')) return `${word.slice(0, -3)}y`;
+  // Only drop "es" after a sibilant (boxes → box, dishes → dish); elsewhere
+  // the plural is a bare "s" and cutting two would give "tables" → "tabl".
+  if (word.length > 4 && /(ch|sh|s|x|z)es$/.test(word)) return word.slice(0, -2);
+  if (word.length > 3 && word.endsWith('s') && !word.endsWith('ss')) return word.slice(0, -1);
+  return word;
+}
 
 /**
  * Detects the most appropriate category for a given text input.
@@ -159,13 +225,20 @@ export function detectCategory(text) {
     }
   }
 
-  // 2. Tokenize and check single words
+  // 2. Tokenize and check single words, exact form before singularized
   const words = lower.split(/\s+/);
   for (const word of words) {
     // Strip surrounding punctuation
-    const cleaned = word.replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, '');
-    if (cleaned && singleWordMap.has(cleaned)) {
+    const cleaned = word.replace(/^[^a-z0-9-]+|[^a-z0-9-]+$/gi, '');
+    if (!cleaned) continue;
+
+    if (singleWordMap.has(cleaned)) {
       return singleWordMap.get(cleaned);
+    }
+
+    const singular = singularize(cleaned);
+    if (singular !== cleaned && singleWordMap.has(singular)) {
+      return singleWordMap.get(singular);
     }
   }
 

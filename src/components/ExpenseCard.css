@@ -1,0 +1,146 @@
+/* ─── Expense list & card ─────────────────────────────────────────────────── */
+
+.expense-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.expense-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  animation: fadeInUp 400ms ease backwards;
+}
+
+/* The whole row is the tap target for editing */
+.expense-card-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: 12px var(--space-sm) 12px 12px;
+  background: none;
+  border: none;
+  border-radius: inherit;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+button.expense-card-main {
+  cursor: pointer;
+}
+
+.expense-card-main:only-child {
+  padding-right: var(--space-md);
+}
+
+.expense-emoji {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  font-size: 1.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-md);
+}
+
+.expense-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.expense-title {
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.expense-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.expense-amount {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  margin-right: var(--space-xs);
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-delete:hover {
+  color: var(--color-danger);
+  background: rgba(255, 107, 107, 0.1);
+}
+
+/* ─── Loading skeletons (same footprint as a card) ────────────────────────── */
+
+.skeleton-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: 12px;
+}
+
+.skeleton-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+}
+
+.skeleton-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeleton-line-1 {
+  width: 60%;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.skeleton-line-2 {
+  width: 40%;
+  height: 12px;
+  border-radius: 4px;
+}
+
+.skeleton-amount {
+  width: 60px;
+  height: 20px;
+  border-radius: 4px;
+}

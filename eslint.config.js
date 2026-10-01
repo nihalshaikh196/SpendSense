@@ -18,4 +18,14 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+  {
+    // Contexts export a provider and its hook together, and main.jsx is the
+    // entry point — neither is a component module Fast Refresh swaps.
+    files: ['src/context/**/*.jsx', 'src/main.jsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
+  {
+    files: ['tests/**/*.{js,mjs}'],
+    languageOptions: { globals: globals.node },
+  },
 ])
