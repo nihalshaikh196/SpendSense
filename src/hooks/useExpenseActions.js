@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useExpenses } from '../context/ExpenseContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { formatAmount } from '../lib/currency.js';
@@ -19,6 +20,7 @@ export function describeExpense(expense) {
 export function useExpenseActions() {
   const { addNewExpense, removeExpense, restoreExpense, editExpense } = useExpenses();
   const { showToast } = useToast();
+  const navigate = useNavigate();
 
   const addWithUndo = useCallback(async (items) => {
     const saved = [];
@@ -66,5 +68,36 @@ export function useExpenseActions() {
     return updated;
   }, [editExpense, showToast]);
 
-  return { addWithUndo, deleteWithUndo, saveWithUndo };
+  /**
+   * Opens the Investments page with an entry ready to file — for a sentence
+   * like "added 180 in zerodha" that isn't spending at all.
+   */
+  const logAsInvestment = useCallback(({ amount, date, currency, text }) => {
+    navigate('/investments', { state: { quickAdd: { amount, date, currency, text } } });
+  }, [navigate]);
+
+  /** An expense that was really an investment: take it out of spending. */
+  const moveToInvestments = useCallback(async (expense) => {
+    try {
+      await removeExpense(expense.id);
+      showToast({
+        message: `Removed ${describeExpense(expense)} from expenses`,
+        actionLabel: 'Undo',
+        onAction: () => {
+          restoreExpense(expense).catch((err) => logError('Failed to restore expense', err));
+        },
+      });
+      logAsInvestment({
+        amount: expense.amount,
+        date: expense.date,
+        currency: expense.currency,
+        text: expense.raw || expense.item,
+      });
+    } catch (err) {
+      logError('Failed to move expense', err);
+      showToast({ message: 'Couldn’t move that expense. Try again.' });
+    }
+  }, [removeExpense, restoreExpense, showToast, logAsInvestment]);
+
+  return { addWithUndo, deleteWithUndo, saveWithUndo, logAsInvestment, moveToInvestments };
 }

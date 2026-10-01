@@ -6,6 +6,29 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == userId;
     }
 
+    // Optional-field checks: absent is fine, present must be well-formed.
+    function optString(d, key, max) {
+      return !(key in d) || (d[key] is string && d[key].size() <= max);
+    }
+
+    function optNumber(d, key, low, high) {
+      return !(key in d) || (d[key] is number && d[key] >= low && d[key] <= high);
+    }
+
+    function optDate(d, key) {
+      return !(key in d) || (d[key] is string && d[key].matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'));
+    }
+
+    function optBool(d, key) {
+      return !(key in d) || d[key] is bool;
+    }
+
+    function hasTimestamps(d) {
+      return optNumber(d, 'createdAt', 0, 100000000000000)
+        && optNumber(d, 'updatedAt', 0, 100000000000000)
+        && optBool(d, 'synced');
+    }
+
     // Mirrors what the client writes (see toRemote in src/services/sync.js).
     // Bounds are generous; they exist to stop malformed or oversized
     // documents, not to second-guess real spending.
@@ -25,10 +48,77 @@ service cloud.firestore {
         && (!('synced' in d) || d.synced is bool);
     }
 
-    // One level only: no subcollections under an expense.
+    // Investments: see REMOTE_FIELDS in src/services/investmentSync.js.
+    function isValidHolding(id) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['id', 'name', 'type', 'platform', 'currency', 'goalId', 'notes', 'rate',
+                               'compounding', 'maturityDate', 'lockInUntil', 'sipAmount', 'sipDay',
+                               'closed', 'createdAt', 'updatedAt', 'synced'])
+        && d.keys().hasAll(['id', 'name', 'type', 'currency'])
+        && d.id == id
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 120
+        && d.type is string && d.type.size() <= 32
+        && d.currency is string && d.currency.size() <= 8
+        && optString(d, 'platform', 80)
+        && optString(d, 'goalId', 64)
+        && optString(d, 'notes', 1000)
+        && optNumber(d, 'rate', 0, 100)
+        && (!('compounding' in d) || d.compounding in [1, 2, 4, 12])
+        && optDate(d, 'maturityDate')
+        && optDate(d, 'lockInUntil')
+        && optNumber(d, 'sipAmount', 0, 1000000000000)
+        && (!('sipDay' in d) || (d.sipDay is int && d.sipDay >= 1 && d.sipDay <= 31))
+        && optBool(d, 'closed')
+        && hasTimestamps(d);
+    }
+
+    function isValidInvestmentTxn(id) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['id', 'holdingId', 'kind', 'date', 'amount', 'units', 'note',
+                               'createdAt', 'updatedAt', 'synced'])
+        && d.keys().hasAll(['id', 'holdingId', 'kind', 'date', 'amount'])
+        && d.id == id
+        && d.holdingId is string && d.holdingId.size() <= 64
+        && d.kind in ['invest', 'withdraw', 'income', 'value']
+        && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && d.amount is number && d.amount >= 0 && d.amount < 1000000000000
+        && optNumber(d, 'units', 0, 1000000000000)
+        && optString(d, 'note', 500)
+        && hasTimestamps(d);
+    }
+
+    function isValidGoal(id) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['id', 'name', 'target', 'targetDate', 'expectedReturn',
+                               'createdAt', 'updatedAt', 'synced'])
+        && d.keys().hasAll(['id', 'name'])
+        && d.id == id
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 80
+        && optNumber(d, 'target', 0, 10000000000000)
+        && optDate(d, 'targetDate')
+        && optNumber(d, 'expectedReturn', -100, 100)
+        && hasTimestamps(d);
+    }
+
+    // One level only: no subcollections under any record.
     match /users/{userId}/expenses/{expenseId} {
       allow read, delete: if isOwner(userId);
       allow create, update: if isOwner(userId) && isValidExpense(expenseId);
+    }
+
+    match /users/{userId}/holdings/{holdingId} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidHolding(holdingId);
+    }
+
+    match /users/{userId}/investmentTxns/{txnId} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidInvestmentTxn(txnId);
+    }
+
+    match /users/{userId}/goals/{goalId} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidGoal(goalId);
     }
   }
 }

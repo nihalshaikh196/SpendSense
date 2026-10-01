@@ -10,9 +10,21 @@ import { v4 as uuidv4 } from 'uuid';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DB_NAME = 'ExpenseTrackerDB';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_NAME = 'expenses';
 const TOMBSTONE_STORE = 'tombstones';
+
+/**
+ * v3: the investments section. Kept in their own stores — with their own
+ * tombstone store — so expense sync never sees or clears investment
+ * deletions. Accessed through investmentStore.js.
+ */
+export const INVESTMENT_STORES = Object.freeze({
+  holdings: 'holdings',
+  investmentTxns: 'investmentTxns',
+  goals: 'goals',
+});
+export const INVESTMENT_TOMBSTONES = 'investmentTombstones';
 
 /**
  * Cached database connection. Reused across calls to avoid
@@ -72,21 +84,34 @@ export async function initDB() {
       if (!db.objectStoreNames.contains(TOMBSTONE_STORE)) {
         db.createObjectStore(TOMBSTONE_STORE, { keyPath: 'id' });
       }
+
+      // v3: investments. Adding stores leaves existing expense data intact.
+      for (const name of Object.values(INVESTMENT_STORES)) {
+        if (!db.objectStoreNames.contains(name)) {
+          db.createObjectStore(name, { keyPath: 'id' });
+        }
+      }
+      if (!db.objectStoreNames.contains(INVESTMENT_TOMBSTONES)) {
+        db.createObjectStore(INVESTMENT_TOMBSTONES, { keyPath: 'id' });
+      }
     };
 
     request.onsuccess = (event) => {
-      dbInstance = event.target.result;
+      const db = event.target.result;
+      dbInstance = db;
 
-      // Handle connection closing unexpectedly (e.g. version upgrade from another tab)
-      dbInstance.onclose = () => {
-        dbInstance = null;
+      // Another tab opening a newer version (an app update) needs this
+      // connection closed or its upgrade stays blocked. Close *this*
+      // connection — the shared variable may already be null or newer.
+      db.onclose = () => {
+        if (dbInstance === db) dbInstance = null;
       };
-      dbInstance.onversionchange = () => {
-        dbInstance.close();
-        dbInstance = null;
+      db.onversionchange = () => {
+        db.close();
+        if (dbInstance === db) dbInstance = null;
       };
 
-      resolve(dbInstance);
+      resolve(db);
     };
   });
 }

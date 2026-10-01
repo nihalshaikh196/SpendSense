@@ -187,8 +187,8 @@ function SettingsPage() {
         >
           <p>
             Every expense on this device will be deleted
-            {user ? ', and from your synced backup too' : ''}. This can’t be undone — export a CSV first if you
-            might want them later.
+            {user ? ', and from your synced backup too' : ''}. Your investments are kept. This can’t be undone —
+            export a CSV first if you might want them later.
           </p>
         </Modal>
       )}

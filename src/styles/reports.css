@@ -1,0 +1,329 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Report building blocks shared by the Dashboard and Investments:
+   toolbar buttons, export menu, stat tiles, cards, ranked bars, meters.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Toolbar buttons & export menu ───────────────────────────────────────── */
+
+.btn-icon-round {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: var(--bg-glass);
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  line-height: 1;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.btn-icon-round:hover:not(:disabled) {
+  background: var(--bg-glass-hover);
+}
+
+.btn-icon-round:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.export-menu {
+  position: relative;
+  margin-left: auto;
+}
+
+.export-menu summary {
+  list-style: none;
+  user-select: none;
+}
+
+.export-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.export-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  width: min(300px, calc(100vw - 32px));
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #161724;
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  animation: fadeInDown 150ms ease;
+}
+
+.export-menu-list button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.export-menu-list button:hover:not(:disabled) {
+  background: var(--bg-glass-hover);
+}
+
+.export-menu-list button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.export-menu-list strong {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.export-menu-list span {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+/* ─── Stat tiles ──────────────────────────────────────────────────────────── */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.stat-tile-hero,
+/* The hero takes a row of its own, so an even-numbered last tile sits alone */
+.stat-tile:last-child:nth-child(even) {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 768px) {
+  .stat-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--space-md);
+  }
+
+  /* The headline number gets two columns so it never has to wrap */
+  .stat-tile-hero {
+    grid-column: span 2;
+  }
+
+  .stat-tile:last-child:nth-child(even) {
+    grid-column: auto;
+  }
+}
+
+.stat-tile {
+  min-width: 0;
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  animation: fadeInUp 400ms ease backwards;
+}
+
+.stat-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.stat-value {
+  font-size: 1.375rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.stat-tile-hero .stat-value {
+  font-size: clamp(2rem, 4.2vw, 3rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  /* A number broken across lines ("₹68,00 / 0") reads as two numbers */
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.stat-sub {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* ─── Cards ───────────────────────────────────────────────────────────────── */
+
+.dash-card {
+  min-width: 0;
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-lg);
+  animation: fadeInUp 450ms ease backwards;
+}
+
+@media (min-width: 768px) {
+  .dash-card {
+    padding: var(--space-lg);
+  }
+}
+
+.card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.card-header h2 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.card-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.card-hint {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.card-note {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.card-footnote {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ─── Ranked bars (categories, items) ─────────────────────────────────────── */
+
+.ranked-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 calc(var(--space-sm) * -1);
+}
+
+.ranked-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px var(--space-sm);
+  border-radius: var(--radius-sm);
+  color: inherit;
+}
+
+.ranked-row-link:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+}
+
+.ranked-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.ranked-label {
+  min-width: 0;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ranked-value {
+  flex-shrink: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ranked-track {
+  display: block;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 0 4px 4px 0;
+}
+
+.ranked-bar {
+  display: block;
+  height: 100%;
+  background: #7c5cfc;
+  border-radius: 0 4px 4px 0;
+  transition: width var(--transition-slow);
+}
+
+.ranked-row-link:hover .ranked-bar {
+  background: #9479fd;
+}
+
+.ranked-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* ─── Meter ───────────────────────────────────────────────────────────────── */
+
+.meter {
+  position: relative;
+  width: 100%;
+  height: 10px;
+  background: rgba(124, 92, 252, 0.18);
+  border-radius: 5px;
+}
+
+.meter-fill {
+  display: block;
+  height: 100%;
+  background: #7c5cfc;
+  border-radius: 5px;
+  transition: width var(--transition-slow);
+}
+
+.meter-warning .meter-fill { background: var(--status-warning); }
+.meter-critical .meter-fill { background: var(--status-critical); }
+
+.meter-marker {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--text-primary);
+  border-radius: 1px;
+  transform: translateX(-1px);
+}
+

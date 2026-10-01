@@ -27,6 +27,7 @@ import {
   wasTracked,
 } from '../lib/analytics.js';
 import { logError } from '../lib/log.js';
+import { investmentKeyword } from '../lib/investments.js';
 import ExpenseCard from '../components/ExpenseCard.jsx';
 import EditExpenseModal from '../components/EditExpenseModal.jsx';
 import { Delta } from '../components/dashboard/StatTile.jsx';
@@ -116,7 +117,7 @@ function HomePage() {
   const { expenses, loading } = useExpenses();
   const { currency, userName, budgets } = useSettings();
   const { user } = useAuth();
-  const { addWithUndo, deleteWithUndo, saveWithUndo } = useExpenseActions();
+  const { addWithUndo, deleteWithUndo, saveWithUndo, logAsInvestment, moveToInvestments } = useExpenseActions();
   const [inputText, setInputText] = useState('');
   const [overrides, setOverrides] = useState(NO_OVERRIDES);
   const [isAdding, setIsAdding] = useState(false);
@@ -320,6 +321,25 @@ function HomePage() {
                 onChange={(change) => setOverride(i, change)}
               />
             ))}
+            {items.length === 1 && investmentKeyword(inputText) && (
+              <div className="invest-hint">
+                <span>
+                  <span aria-hidden="true">📈 </span>
+                  Sounds like an investment. Log it under Investments so it counts toward your portfolio, not your spending.
+                </span>
+                <button
+                  type="button"
+                  className="btn-secondary btn-small"
+                  onClick={() => {
+                    logAsInvestment({ ...items[0], text: inputText.trim() });
+                    setInputText('');
+                    setOverrides(NO_OVERRIDES);
+                  }}
+                >
+                  Log as investment
+                </button>
+              </div>
+            )}
             {canAdd ? (
               <p id="input-hint" className="input-hint">
                 Tap the category or date to change it.
@@ -431,6 +451,7 @@ function HomePage() {
           expense={editing}
           onSave={(updates) => saveWithUndo(editing, updates)}
           onDelete={deleteWithUndo}
+          onMoveToInvestments={moveToInvestments}
           onClose={() => setEditing(null)}
         />
       )}

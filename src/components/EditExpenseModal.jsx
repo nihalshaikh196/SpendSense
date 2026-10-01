@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from 'react';
 import { CATEGORIES } from '../lib/categories.js';
+import { investmentKeyword } from '../lib/investments.js';
 import { logError } from '../lib/log.js';
 import Modal from './Modal.jsx';
 
@@ -11,9 +12,11 @@ import Modal from './Modal.jsx';
  * @param {Object}   props.expense
  * @param {(updates: Object) => Promise<*>} props.onSave
  * @param {(expense: Object) => void} [props.onDelete] - Shows a Delete button
+ * @param {(expense: Object) => void} [props.onMoveToInvestments] - Offered
+ *   when the text reads like an investment ("added 180 in zerodha")
  * @param {() => void} props.onClose
  */
-function EditExpenseModal({ expense, onSave, onDelete, onClose }) {
+function EditExpenseModal({ expense, onSave, onDelete, onMoveToInvestments, onClose }) {
   const ids = useId();
   const amountRef = useRef(null);
   const [error, setError] = useState('');
@@ -102,6 +105,21 @@ function EditExpenseModal({ expense, onSave, onDelete, onClose }) {
           <p className="edit-original">
             You typed: <q>{expense.raw}</q>
           </p>
+        )}
+        {onMoveToInvestments && investmentKeyword(`${expense.raw} ${expense.item}`) && (
+          <div className="invest-hint">
+            <span>This looks like an investment, not spending.</span>
+            <button
+              type="button"
+              className="btn-secondary btn-small"
+              onClick={() => {
+                onClose();
+                onMoveToInvestments(expense);
+              }}
+            >
+              Move to Investments
+            </button>
+          </div>
         )}
         {error && <div className="form-error" role="alert">{error}</div>}
         <div className={`modal-actions ${onDelete ? 'modal-actions-split' : ''}`}>

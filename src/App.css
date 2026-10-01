@@ -49,8 +49,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  flex: 1;
+  min-width: 0;
   gap: 2px;
-  padding: var(--space-sm) var(--space-md);
+  /* Five tabs share a 375px phone: equal widths, little side padding */
+  padding: var(--space-sm) var(--space-2xs);
   color: var(--text-muted);
   text-decoration: none;
   font-size: 0.6875rem;
@@ -157,6 +160,7 @@
   }
 
   .nav-item {
+    flex: none;
     flex-direction: row;
     justify-content: flex-start;
     gap: var(--space-md);

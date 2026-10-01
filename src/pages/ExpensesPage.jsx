@@ -70,7 +70,7 @@ function groupByDay(list) {
 function ExpensesPage() {
   const { expenses, loading } = useExpenses();
   const { currency: preferredCurrency } = useSettings();
-  const { deleteWithUndo, saveWithUndo } = useExpenseActions();
+  const { deleteWithUndo, saveWithUndo, moveToInvestments } = useExpenseActions();
   const [searchParams, setSearchParams] = useSearchParams();
   const ids = useId();
   const today = todayString();
@@ -364,6 +364,7 @@ function ExpensesPage() {
           expense={editing}
           onSave={(updates) => saveWithUndo(editing, updates)}
           onDelete={deleteWithUndo}
+          onMoveToInvestments={moveToInvestments}
           onClose={() => setEditing(null)}
         />
       )}

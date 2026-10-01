@@ -47,6 +47,7 @@ import StatTile, { Delta } from '../components/dashboard/StatTile.jsx';
 import RankedList from '../components/dashboard/RankedList.jsx';
 import BudgetCard from '../components/dashboard/BudgetCard.jsx';
 import TrendCard from '../components/dashboard/TrendCard.jsx';
+import '../styles/reports.css';
 import './DashboardPage.css';
 
 /** Projections from one or two days of data are noise, not a forecast. */
