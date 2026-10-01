@@ -1,8 +1,8 @@
 /**
  * @module store
  * @description IndexedDB storage layer for expense records. Provides CRUD
- * operations, filtering, and aggregation stats using native IndexedDB API
- * wrapped in Promises.
+ * operations and filtering using native IndexedDB API wrapped in Promises.
+ * Aggregation lives in `analytics.js` and runs on the in-memory list.
  */
 
 import { v4 as uuidv4 } from 'uuid';
@@ -10,8 +10,21 @@ import { v4 as uuidv4 } from 'uuid';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DB_NAME = 'ExpenseTrackerDB';
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 const STORE_NAME = 'expenses';
+const TOMBSTONE_STORE = 'tombstones';
+
+/**
+ * v3: the investments section. Kept in their own stores — with their own
+ * tombstone store — so expense sync never sees or clears investment
+ * deletions. Accessed through investmentStore.js.
+ */
+export const INVESTMENT_STORES = Object.freeze({
+  holdings: 'holdings',
+  investmentTxns: 'investmentTxns',
+  goals: 'goals',
+});
+export const INVESTMENT_TOMBSTONES = 'investmentTombstones';
 
 /**
  * Cached database connection. Reused across calls to avoid
@@ -65,21 +78,40 @@ export async function initDB() {
         store.createIndex('category', 'category', { unique: false });
         store.createIndex('createdAt', 'createdAt', { unique: false });
       }
+
+      // v2: records deleted while offline, so the next sync can delete them
+      // remotely instead of the next pull resurrecting them.
+      if (!db.objectStoreNames.contains(TOMBSTONE_STORE)) {
+        db.createObjectStore(TOMBSTONE_STORE, { keyPath: 'id' });
+      }
+
+      // v3: investments. Adding stores leaves existing expense data intact.
+      for (const name of Object.values(INVESTMENT_STORES)) {
+        if (!db.objectStoreNames.contains(name)) {
+          db.createObjectStore(name, { keyPath: 'id' });
+        }
+      }
+      if (!db.objectStoreNames.contains(INVESTMENT_TOMBSTONES)) {
+        db.createObjectStore(INVESTMENT_TOMBSTONES, { keyPath: 'id' });
+      }
     };
 
     request.onsuccess = (event) => {
-      dbInstance = event.target.result;
+      const db = event.target.result;
+      dbInstance = db;
 
-      // Handle connection closing unexpectedly (e.g. version upgrade from another tab)
-      dbInstance.onclose = () => {
-        dbInstance = null;
+      // Another tab opening a newer version (an app update) needs this
+      // connection closed or its upgrade stays blocked. Close *this*
+      // connection — the shared variable may already be null or newer.
+      db.onclose = () => {
+        if (dbInstance === db) dbInstance = null;
       };
-      dbInstance.onversionchange = () => {
-        dbInstance.close();
-        dbInstance = null;
+      db.onversionchange = () => {
+        db.close();
+        if (dbInstance === db) dbInstance = null;
       };
 
-      resolve(dbInstance);
+      resolve(db);
     };
   });
 }
@@ -300,7 +332,8 @@ export async function updateExpense(id, updates) {
 }
 
 /**
- * Deletes an expense from the database.
+ * Deletes an expense from the database and records a tombstone so the
+ * deletion can be replayed against Firestore on the next sync.
  *
  * @param {string} id - The expense UUID to delete
  * @returns {Promise<void>}
@@ -315,7 +348,7 @@ export async function deleteExpense(id) {
   }
 
   const db = await initDB();
-  const tx = db.transaction(STORE_NAME, 'readwrite');
+  const tx = db.transaction([STORE_NAME, TOMBSTONE_STORE], 'readwrite');
   const store = tx.objectStore(STORE_NAME);
 
   // Verify the expense exists before deleting
@@ -325,75 +358,75 @@ export async function deleteExpense(id) {
   }
 
   store.delete(id);
+  tx.objectStore(TOMBSTONE_STORE).put({ id, deletedAt: Date.now() });
   await promisifyTransaction(tx);
 }
 
-// ─── Stats / Aggregation ─────────────────────────────────────────────────────
+/**
+ * Removes an expense locally without recording a tombstone. Used when the
+ * pull already knows the record is gone remotely — writing a tombstone there
+ * would push a redundant delete back to a document that no longer exists.
+ *
+ * @param {string} id - The expense UUID to remove
+ * @returns {Promise<void>}
+ */
+export async function deleteExpenseLocal(id) {
+  if (!id) return;
+
+  const db = await initDB();
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  tx.objectStore(STORE_NAME).delete(id);
+  await promisifyTransaction(tx);
+}
 
 /**
- * Computes aggregated statistics for a given time period.
+ * Deletes every expense, recording a tombstone for each so the wipe
+ * propagates to Firestore on the next sync instead of being undone by it.
  *
- * @param {'today'|'week'|'month'} period - The period to aggregate over
- * @returns {Promise<{
- *   total: number,
- *   count: number,
- *   byCategory: Record<string, number>
- * }>} Aggregated stats
- *
- * @example
- * const stats = await getStats('week');
- * // → { total: 2500, count: 8, byCategory: { food: 1200, transport: 500, ... } }
+ * @returns {Promise<number>} How many expenses were removed
  */
-export async function getStats(period = 'month') {
-  const today = new Date();
-  let startDate;
+export async function clearAllExpenses() {
+  const db = await initDB();
+  const tx = db.transaction([STORE_NAME, TOMBSTONE_STORE], 'readwrite');
+  const store = tx.objectStore(STORE_NAME);
+  const tombstones = tx.objectStore(TOMBSTONE_STORE);
 
-  switch (period) {
-    case 'today':
-      startDate = toDateString(today);
-      break;
-
-    case 'week': {
-      const weekStart = new Date(today);
-      const dayOfWeek = weekStart.getDay();
-      // Start from Monday (adjust for Sunday = 0)
-      const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-      weekStart.setDate(weekStart.getDate() - diff);
-      startDate = toDateString(weekStart);
-      break;
-    }
-
-    case 'month':
-    default: {
-      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      startDate = toDateString(monthStart);
-      break;
-    }
+  const ids = await promisifyRequest(store.getAllKeys());
+  const deletedAt = Date.now();
+  for (const id of ids) {
+    tombstones.put({ id, deletedAt });
   }
+  store.clear();
 
-  const endDate = toDateString(today);
+  await promisifyTransaction(tx);
+  return ids.length;
+}
 
-  const expenses = await getExpenses({ startDate, endDate });
+// ─── Tombstones ──────────────────────────────────────────────────────────────
 
-  const stats = {
-    total: 0,
-    count: expenses.length,
-    byCategory: {},
-  };
+/**
+ * Returns all pending deletion tombstones.
+ * @returns {Promise<Array<{ id: string, deletedAt: number }>>}
+ */
+export async function getTombstones() {
+  const db = await initDB();
+  const tx = db.transaction(TOMBSTONE_STORE, 'readonly');
+  return promisifyRequest(tx.objectStore(TOMBSTONE_STORE).getAll());
+}
 
-  for (const expense of expenses) {
-    const amount = expense.amount || 0;
-    stats.total += amount;
+/**
+ * Clears tombstones whose deletions have been applied remotely.
+ * @param {string[]} ids
+ * @returns {Promise<void>}
+ */
+export async function clearTombstones(ids) {
+  if (!ids?.length) return;
 
-    const cat = expense.category || 'other';
-    stats.byCategory[cat] = (stats.byCategory[cat] || 0) + amount;
+  const db = await initDB();
+  const tx = db.transaction(TOMBSTONE_STORE, 'readwrite');
+  const store = tx.objectStore(TOMBSTONE_STORE);
+  for (const id of ids) {
+    store.delete(id);
   }
-
-  // Round to 2 decimal places to avoid floating-point drift
-  stats.total = Math.round(stats.total * 100) / 100;
-  for (const cat of Object.keys(stats.byCategory)) {
-    stats.byCategory[cat] = Math.round(stats.byCategory[cat] * 100) / 100;
-  }
-
-  return stats;
+  await promisifyTransaction(tx);
 }

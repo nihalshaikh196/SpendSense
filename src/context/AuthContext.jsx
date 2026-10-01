@@ -12,6 +12,8 @@ export function AuthProvider({ children }) {
     // Listen for auth state changes
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
+        // Signs out after 30 days so a shared device doesn't stay signed
+        // in indefinitely.
         const loginTimestamp = localStorage.getItem('loginTimestamp');
         const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
         

@@ -12,7 +12,11 @@ import { detectCategory } from './categories.js';
 
 /** Words to exclude from people extraction */
 const EXCLUDED_PEOPLE = new Set([
-  'everyone', 'all', 'people', 'guys'
+  'everyone', 'all', 'people', 'guys',
+  // Self-references: the patterns below deliberately normalize "I"/"me" into
+  // the name list so the splitter sees a uniform "X and Y", but the speaker is
+  // never someone they spent *with*.
+  'i', 'me', 'myself',
 ]);
 
 /** Prepositions and filler words to strip from item edges */
@@ -180,24 +184,82 @@ function resolveDate(text, today) {
 
 // ─── Amount Extraction ────────────────────────────────────────────────────────
 
-function extractAmount(text) {
-  // Match amounts that may have:
-  //   - Optional currency symbol prefix: ₹, $, €, £
-  //   - Comma grouping: 1,500 or 10,00,000 (Indian style)
-  //   - Decimal part: .50
-  const amountRegex = /(?:[₹$€£]\s*)?((?:\d{1,3}(?:,\d{2,3})+|\d+)(?:\.\d{1,2})?)(?:\s*(?:rs|rupees|inr|bucks|dollars|usd|eur|gbp))?\b/gi;
+// Match amounts that may have:
+//   - Optional currency symbol prefix: ₹, $, €, £
+//   - Comma grouping: 1,500 or 10,00,000 (Indian style)
+//   - Decimal part: .50
+// The \b alternative keeps digits inside words ("mp3") from matching.
+const AMOUNT_REGEX = /(?:([₹$€£])\s*|\b)((?:\d{1,3}(?:,\d{2,3})+|\d+)(?:\.\d{1,2})?)(?:\s*(rs|rupees|inr|bucks|dollars|usd|eur|gbp))?\b/gi;
 
+/**
+ * Words that can follow a number without making it a count of something.
+ * "300 on lunch" is a price; "2 chairs" is a quantity.
+ */
+const AMOUNT_FOLLOWERS = new Set([
+  'on', 'for', 'at', 'to', 'in', 'with', 'from', 'and', 'or', 'by', 'via',
+  'each', 'per', 'only', 'total', 'today', 'yesterday', 'tonight', 'last', 'this',
+  'spent', 'paid', 'bought', 'had', 'went', 'ordered', 'got',
+]);
+
+/**
+ * Every number in the text, tagged with how likely it is to be the price.
+ * `marked` numbers carry a currency symbol or word; `quantity` numbers are
+ * directly followed by a noun ("2 chairs", "100 pens").
+ *
+ * @param {string} text
+ * @returns {Array<{ amount: number, matched: string, marked: boolean, quantity: boolean }>}
+ */
+function findAmountCandidates(text) {
+  const candidates = [];
+  AMOUNT_REGEX.lastIndex = 0;
   let match;
-  while ((match = amountRegex.exec(text)) !== null) {
-    const raw = match[1];
-    const numStr = raw.replace(/,/g, '');
-    const num = parseFloat(numStr);
-    if (Number.isFinite(num) && num > 0) {
-      return { amount: num, matched: match[0].trim() };
-    }
-  }
+  while ((match = AMOUNT_REGEX.exec(text)) !== null) {
+    const amount = parseFloat(match[2].replace(/,/g, ''));
+    if (!Number.isFinite(amount) || amount <= 0) continue;
 
-  return null;
+    const marked = Boolean(match[1] || match[3]);
+    const next = text.slice(match.index + match[0].length).match(/^\s+([a-z]+)/i);
+    const quantity = !marked && Boolean(next) && !AMOUNT_FOLLOWERS.has(next[1].toLowerCase());
+
+    candidates.push({ amount, matched: match[0].trim(), marked, quantity });
+  }
+  return candidates;
+}
+
+/**
+ * Picks the price out of a sentence. A number with a currency marker wins;
+ * then the first number that isn't a count; and only if every number looks
+ * like a count, the largest. So "2 chairs 8000" is 8000, and "100 pens for
+ * 50" is 50 — where "largest number" alone would have said 100.
+ *
+ * Callers mask dates out first so "15/06 dinner 800" doesn't read as 15.
+ */
+function extractAmount(text) {
+  const candidates = findAmountCandidates(text);
+  if (candidates.length === 0) return null;
+
+  const pick =
+    candidates.find((c) => c.marked) ||
+    candidates.find((c) => !c.quantity) ||
+    candidates.reduce((best, c) => (c.amount > best.amount ? c : best));
+
+  return { amount: pick.amount, matched: pick.matched };
+}
+
+/** How many numbers in the text read as prices rather than counts. */
+function countPrices(text) {
+  return findAmountCandidates(text).filter((c) => c.marked || !c.quantity).length;
+}
+
+/**
+ * Blanks out a matched span (same length, so indices stay aligned) so later
+ * passes don't mistake part of a date for an amount.
+ */
+function maskSpan(text, span) {
+  if (!span) return text;
+  const idx = text.toLowerCase().indexOf(span.toLowerCase());
+  if (idx === -1) return text;
+  return text.slice(0, idx) + ' '.repeat(span.length) + text.slice(idx + span.length);
 }
 
 // ─── People Extraction ───────────────────────────────────────────────────────
@@ -274,6 +336,10 @@ function isCurrencyKeyword(word) {
  * @returns {string} Cleaned item description
  */
 function extractItem(text, partsToRemove) {
+  // Removed spans become a gap marker rather than a space, so the filler word
+  // that introduced them can be dropped too: "shirt for <2000> from Zara"
+  // should lose the "for", not keep it stranded mid-phrase.
+  const GAP = '\u0000';
   let result = text;
 
   // Remove each matched part
@@ -281,7 +347,7 @@ function extractItem(text, partsToRemove) {
     if (part) {
       // Escape regex special characters in the part
       const escaped = part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      result = result.replace(new RegExp(escaped, 'gi'), ' ');
+      result = result.replace(new RegExp(escaped, 'gi'), ` ${GAP} `);
     }
   }
 
@@ -290,30 +356,76 @@ function extractItem(text, partsToRemove) {
     for (const kw of def.keywords) {
       // Only remove standalone words (not symbols embedded in other words)
       const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      result = result.replace(new RegExp(`\\b${escaped}\\b`, 'gi'), ' ');
+      result = result.replace(new RegExp(`\\b${escaped}\\b`, 'gi'), ` ${GAP} `);
     }
   }
 
   // Remove currency symbols
   result = result.replace(/[₹$€£]/g, ' ');
 
-  // Clean up: collapse whitespace, trim
-  result = result.replace(/\s+/g, ' ').trim();
+  // Drop filler words sitting directly before a gap, then the gaps themselves
+  const kept = [];
+  for (const word of result.split(/\s+/).filter(Boolean)) {
+    if (word === GAP) {
+      while (kept.length > 0 && EDGE_WORDS.has(kept[kept.length - 1].toLowerCase())) {
+        kept.pop();
+      }
+    } else {
+      kept.push(word);
+    }
+  }
+  const words = kept;
 
   // Strip leading/trailing prepositions and filler words
-  let words = result.split(/\s+/);
-
-  // Remove from the start
   while (words.length > 0 && EDGE_WORDS.has(words[0].toLowerCase())) {
     words.shift();
   }
-
-  // Remove from the end
   while (words.length > 0 && EDGE_WORDS.has(words[words.length - 1].toLowerCase())) {
     words.pop();
   }
 
   return words.join(' ');
+}
+
+// ─── Multi-item Splitting ─────────────────────────────────────────────────────
+
+/** Separators between items; captured so unsplit pieces can be rejoined. */
+const ITEM_SEPARATOR = /(\s+and\s+|\s+then\s+|\s*\+\s*|\s*&\s*|\s*;\s*|,(?!\d)\s*)/i;
+
+function hasPrice(segment, today) {
+  const date = resolveDate(segment, today);
+  return countPrices(maskSpan(segment, date?.matched)) > 0;
+}
+
+/**
+ * Splits "coffee 120 and sandwich 80" into one segment per priced item.
+ * A piece without its own price is glued back onto its neighbour, so
+ * "lunch 300 with Raj and Amit" stays whole — "Amit" has no price, so the
+ * "and" was joining names, not items.
+ *
+ * @returns {string[]} One segment, or several when the text holds 2+ prices
+ */
+function splitItems(text, today) {
+  const date = resolveDate(text, today);
+  if (countPrices(maskSpan(text, date?.matched)) < 2) return [text];
+
+  const parts = text.split(ITEM_SEPARATOR);
+  const segments = [];
+  let current = parts[0];
+
+  for (let i = 1; i < parts.length; i += 2) {
+    const separator = parts[i];
+    const next = parts[i + 1] ?? '';
+    if (hasPrice(current, today) && hasPrice(next, today)) {
+      segments.push(current);
+      current = next;
+    } else {
+      current += separator + next;
+    }
+  }
+  segments.push(current);
+
+  return segments.map((s) => s.trim()).filter(Boolean);
 }
 
 // ─── Main Parser ──────────────────────────────────────────────────────────────
@@ -356,7 +468,7 @@ function extractItem(text, partsToRemove) {
  * //     item: 'souvenirs', people: [], category: 'other',
  * //     raw: '50 dollars on souvenirs yesterday' }
  */
-export function parseExpense(sentence, defaultCurrency = 'INR') {
+export function parseExpense(sentence, defaultCurrency = 'INR', userName = '') {
   if (!sentence || typeof sentence !== 'string') {
     return {
       amount: null,
@@ -370,30 +482,51 @@ export function parseExpense(sentence, defaultCurrency = 'INR') {
   }
 
   const raw = sentence.trim();
-  const today = new Date();
+  return parseSegment(raw, { defaultCurrency, userName, today: new Date() });
+}
 
+/**
+ * Parses one priced item. Shared by `parseExpense` (the whole sentence) and
+ * `parseExpenses` (each item of a multi-item sentence).
+ *
+ * @param {string} raw
+ * @param {Object} ctx
+ * @param {string} ctx.defaultCurrency
+ * @param {string} ctx.userName
+ * @param {Date}   ctx.today
+ * @param {string} [ctx.fallbackDate] - Used when this segment names no date
+ */
+function parseSegment(raw, { defaultCurrency, userName, today, fallbackDate }) {
   // ── 1. Currency ──
   const detectedCurrency = detectCurrency(raw);
   const currency = detectedCurrency || defaultCurrency;
 
-  // ── 2. Amount ──
-  const amountResult = extractAmount(raw);
-  const amount = amountResult ? amountResult.amount : null;
-
-  // ── 3. Date ──
+  // ── 2. Date ── (before the amount, so a date's digits can't be read as one)
   const dateResult = resolveDate(raw, today);
-  const date = dateResult ? dateResult.dateStr : toDateString(today);
+  const date = dateResult ? dateResult.dateStr : fallbackDate || toDateString(today);
+
+  // ── 3. Amount ──
+  const amountResult = extractAmount(maskSpan(raw, dateResult?.matched));
+  const amount = amountResult ? amountResult.amount : null;
 
   // ── 4. People ──
   const peopleResult = extractPeople(raw);
-  const people = peopleResult.people;
+  const self = userName.trim().toLowerCase();
+  const people = self
+    ? peopleResult.people.filter((p) => p.toLowerCase() !== self)
+    : peopleResult.people;
 
   // ── 5. Item (extract by removing known parts) ──
+  // Longest first: the people match often ends with the amount ("with Sarah
+  // 900"), so removing the short amount first would stop the longer span from
+  // matching and leave the names stranded in the item.
   const removals = [
     amountResult?.matched,
     dateResult?.matched,
     peopleResult.matched ? peopleResult.matched : null,
-  ].filter(Boolean);
+  ]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
 
   const item = extractItem(raw, removals);
 
@@ -413,6 +546,46 @@ export function parseExpense(sentence, defaultCurrency = 'INR') {
     category,
     raw,
   };
+}
+
+/**
+ * Parses a sentence that may describe several purchases, returning one
+ * expense per priced item: "coffee 120 and sandwich 80" is two expenses,
+ * not ₹120 of "coffee and sandwich 80".
+ *
+ * A date or currency named once applies to every item ("coffee 120 and
+ * sandwich 80 yesterday"). People stay with the item they were named on,
+ * and each expense's `raw` is its own segment — so searching for "Raj"
+ * finds the sandwich he was named on, not the coffee beside it.
+ *
+ * @param {string} sentence
+ * @param {string} [defaultCurrency='INR']
+ * @param {string} [userName='']
+ * @returns {Array<ReturnType<typeof parseExpense>>} Always at least one entry
+ *
+ * @example
+ * parseExpenses('coffee 120 and sandwich 80')
+ * // → [{ amount: 120, item: 'coffee', ... }, { amount: 80, item: 'sandwich', ... }]
+ */
+export function parseExpenses(sentence, defaultCurrency = 'INR', userName = '') {
+  if (!sentence || typeof sentence !== 'string' || !sentence.trim()) {
+    return [parseExpense(sentence, defaultCurrency, userName)];
+  }
+
+  const raw = sentence.trim();
+  const today = new Date();
+  const segments = splitItems(raw, today);
+  if (segments.length < 2) {
+    return [parseSegment(raw, { defaultCurrency, userName, today })];
+  }
+
+  const ctx = {
+    defaultCurrency: detectCurrency(raw) || defaultCurrency,
+    fallbackDate: resolveDate(raw, today)?.dateStr,
+    userName,
+    today,
+  };
+  return segments.map((segment) => parseSegment(segment, ctx));
 }
 
 export default parseExpense;

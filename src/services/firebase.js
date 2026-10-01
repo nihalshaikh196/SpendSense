@@ -1,16 +1,22 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { logError } from "../lib/log.js";
 
+// Project settings come from .env (see .env.example), not from source.
 const firebaseConfig = {
-  apiKey: "AIzaSyA9D0Gt1B0p5z_Nuj8gIaMRAxakeO5QDMI",
-  authDomain: "expensesense-5050f.firebaseapp.com",
-  projectId: "expensesense-5050f",
-  storageBucket: "expensesense-5050f.firebasestorage.app",
-  messagingSenderId: "871701910988",
-  appId: "1:871701910988:web:180f2844536659f8b43969",
-  measurementId: "G-RJ991NXB2G"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
+
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  console.error("Firebase settings are missing — copy .env.example to .env and fill it in.");
+}
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -24,7 +30,7 @@ export const loginWithGoogle = async () => {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error) {
-    console.error("Error signing in with Google", error);
+    logError("Error signing in with Google", error);
     throw error;
   }
 };
@@ -33,7 +39,7 @@ export const logout = async () => {
   try {
     await signOut(auth);
   } catch (error) {
-    console.error("Error signing out", error);
+    logError("Error signing out", error);
     throw error;
   }
 };
